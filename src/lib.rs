@@ -24,7 +24,7 @@ fn run_file(path: &str) -> Result<(), Error> {
 fn run(source: &str) -> Result<(), Error> {
   // process source code
   for token in scanner::scan_tokens(source) {
-    println!("{token:?}");
+    println!("{token}");
   };
 
   Ok(())
@@ -74,7 +74,6 @@ pub fn parse_args(
 pub fn error(line: i32, message: &str) {
   report(line, "", message);
 }
-
 
 
 fn report(line: i32, at: &str, message: &str) {

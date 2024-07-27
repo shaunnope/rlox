@@ -2,6 +2,10 @@
 
 use std::fmt::{self, Display};
 
+#[cfg(test)]
+mod tests;
+
+
 #[derive(Debug)]
 pub enum TokenType {
   // single character
@@ -15,14 +19,64 @@ pub enum TokenType {
   Less, LessEqual,
 
   // literals
-  Identifier, String, Number,
+  Identifier(String), String(String), Integer(i32), Float(f32),
 
   // keywords
   And, Class, Else, False, Fun, For, If, Nil, Or,
   Print, Return, Super, This, True, Var, While,
 
-  Eof
+  EOF
 }
+
+// impl TokenType {
+//   pub fn get_literal(&self) -> &str {
+//     match self {
+//       Self::LeftParen => "(",
+//       Self::RightParen => ")",
+//       Self::LeftBrace => "{",
+//       Self::RightBrace => "}",
+//       Self::Comma => ",",
+//       Self::Dot => ".",
+//       Self::Minus => "-",
+//       Self::Plus => "+",
+//       Self::Semicolon => ";",
+//       Self::Slash => "\\",
+//       Self::Star => "*",
+
+//       Self::Bang => "!",
+//       Self::BangEqual => "!=",
+//       Self::Equal => "=",
+//       Self::EqualEqual => "==",
+//       Self::Greater => ">",
+//       Self::GreaterEqual => ">=",
+//       Self::Less => "<",
+//       Self::LessEqual => "<=",
+
+//       Self::Identifier(s) => s.as_str(),
+//       Self::String(s) => s.as_str(),
+//       Self::Integer(n) => format!("{n}"),
+//       Self::Float(n) => n.to_string().as_str(),
+      
+//       Self::And => "and",
+//       Self::Class => "class",
+//       Self::Else => "else",
+//       Self::False => "false",
+//       Self::Fun => "fun",
+//       Self::For => "for",
+//       Self::If => "if",
+//       Self::Nil => "nil",
+//       Self::Or => "or",
+//       Self::Print => "print",
+//       Self::Return => "return",
+//       Self::Super => "super",
+//       Self::This => "this",
+//       Self::True => "true",
+//       Self::Var => "let",
+//       Self::While => "while",
+//       Self::EOF => ""
+//     }
+//   }
+// }
 
 impl Display for TokenType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -30,15 +84,13 @@ impl Display for TokenType {
   }
 }
 
-pub struct Token<T: Display> {
+pub struct Token {
   pub ttype: TokenType,
-  pub lexeme: String,
-  pub literal: T,
   pub line: i32
 }
 
-impl<T: Display> Display for Token<T> {
+impl Display for Token {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{} {} {}", self.ttype, self.lexeme, self.literal)
+    write!(f, "{}", self.ttype)
   }
 }
