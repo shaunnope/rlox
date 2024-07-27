@@ -12,6 +12,8 @@ mod tests;
 mod scanner;
 mod error;
 
+mod token;
+
 fn run_file(path: &str) -> Result<(), Error> {
   let bytes = fs::read(path)?;
   run(str::from_utf8(&bytes)?)?;
