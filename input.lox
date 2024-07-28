@@ -1,10 +1,8 @@
 // this is a comment
-(( )){} // grouping stuff
+var language = "lox";
 
-// operators
-!*+-/=<> <= ==
-"asdf" // single line string
-"lorem ipsum
-asdionh<asd
-\n"
-() * 12.6 2.3.1
+fun forest(n) {
+  var time = 0;
+  while (time < 5) time = time + 1;
+  return false
+}

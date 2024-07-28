@@ -103,6 +103,11 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
         }
       }
 
+      // identifiers
+      'a'..='z'|'A'..='Z'|'_' => {
+        add_token(line, tokens, parse_identifier(ch, iter));
+      }
+
       _ => crate::error(line, "Unexpected character")
     };
     
@@ -117,10 +122,6 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
   return res
 }
 
-// fn scan_token(source: &str, at: i32, tokens: &mut [Token]) {
-//   let c = source;
-//   // add_token(tokens, ttype)
-// }
 
 fn match_next(iter: &mut MultiPeek<Chars>, target: &char) -> bool {
   if let Some(c) = iter.peek() {
@@ -128,10 +129,6 @@ fn match_next(iter: &mut MultiPeek<Chars>, target: &char) -> bool {
   }
   false
 }
-
-// fn advance() {
- 
-// }
 
 fn add_token(line: i32, tokens: &mut Vec<Token>, ttype: TokenType) {
   tokens.push(Token {ttype, line});
@@ -206,5 +203,40 @@ fn build_number(start: char, tail: Vec<char>) -> Option<f64> {
   match (String::from(start) + &tail).parse() {
     Ok(n) => Some(n),
     Err(_) => None
+  }
+}
+
+fn parse_identifier(start: char, iter: &mut MultiPeek<Chars>) -> TokenType {
+
+  let tail: String = iter.peeking_take_while(
+    |ch| {
+    match ch {
+      '0'..='9'|'a'..='z'|'A'..='Z'|'_' => true,
+      _ => false,
+    }
+  }).collect();
+
+  get_token_type(String::from(start) + &tail)
+}
+
+fn get_token_type(lexeme: String) -> TokenType {
+  match lexeme.as_str() {
+    "and" => TokenType::And,
+    "class" => TokenType::Class,
+    "else" => TokenType::Else,
+    "false" => TokenType::False,
+    "fun" => TokenType::Fun,
+    "for" => TokenType::For,
+    "if" => TokenType::If,
+    "nil" => TokenType::Nil,
+    "or" => TokenType::Or,
+    "print" => TokenType::Print,
+    "return" => TokenType::Return,
+    "super" => TokenType::Super,
+    "this" => TokenType::This,
+    "true" => TokenType::True,
+    "var" => TokenType::Var,
+    "while" => TokenType::While,
+    _ => TokenType::Identifier(lexeme)
   }
 }
