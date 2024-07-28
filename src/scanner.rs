@@ -5,7 +5,9 @@ use std::str::Chars;
 use itertools::{Itertools, MultiPeek};
 use crate::token::{Token, TokenType};
 
-pub fn scan_tokens(source: &str) -> Vec<Token> {
+use crate::error::Error;
+
+pub fn scan_tokens(source: &str) -> Result<Vec<Token>, Error> {
 
   let mut res = Vec::new();
   let tokens = &mut res;
@@ -117,7 +119,7 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
       line 
     });
 
-  return res
+  return Ok(res)
 }
 
 

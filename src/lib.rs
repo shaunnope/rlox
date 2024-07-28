@@ -1,18 +1,21 @@
+#[cfg(test)]
+mod tests;
+
+mod token;
+mod scanner;
+mod ast;
+
+
+mod error; // custom error type
+
+
 use std::fs;
 use std::io::{self, Write};
 use std::str;
-// use std::env;
 
 use error::Error;
 
 
-#[cfg(test)]
-mod tests;
-
-mod scanner;
-mod error;
-
-mod token;
 
 fn run_file(path: &str) -> Result<(), Error> {
   let bytes = fs::read(path)?;
@@ -23,7 +26,7 @@ fn run_file(path: &str) -> Result<(), Error> {
 
 fn run(source: &str) -> Result<(), Error> {
   // process source code
-  for token in scanner::scan_tokens(source) {
+  for token in scanner::scan_tokens(source)? {
     println!("{token}");
   };
 

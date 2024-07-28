@@ -1,17 +1,25 @@
+use std::error;
+use std::fmt;
+
 // use std::sync::atomic::{AtomicBool, Ordering};
 
-pub type Error = Box<dyn std::error::Error + 'static>;
+pub type Error = Box<dyn error::Error + 'static>;
 
-// static HAD_ERROR: AtomicBool = AtomicBool::new(false);
+#[derive(Debug)]
+pub struct SyntaxError {
+    message: String,
+}
 
-// pub fn set() {
-//   HAD_ERROR.store(true, Ordering::Relaxed);
-// }
+impl SyntaxError {
+    pub fn new(message: String) -> Self {
+        SyntaxError { message }
+    }
+}
 
-// pub fn unset() {
-//   HAD_ERROR.store(false, Ordering::Relaxed);
-// }
+impl fmt::Display for SyntaxError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{:?}", self)
+  }
+}
 
-// pub fn get() -> bool {
-//   HAD_ERROR.load(Ordering::Relaxed)
-// }
+impl error::Error for SyntaxError {}

@@ -18,7 +18,7 @@ fn comments_ignored() {
     Token {ttype: TokenType::Minus, line: 4},
     Token {ttype: TokenType::Dot, line: 4},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
 
 
@@ -42,7 +42,7 @@ fn correct_single_char_tokens() {
     Token {ttype: TokenType::Dot, line: 2},
     Token {ttype: TokenType::Semicolon, line: 2},
     Token {ttype: TokenType::EOF, line: 2},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
 
 #[ignore]
@@ -64,7 +64,7 @@ fn correct_space_delimited_variable_length_tokens() {
     Token {ttype: TokenType::Equal, line: 4},
     Token {ttype: TokenType::EqualEqual, line: 4},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
 
 #[ignore]
@@ -94,7 +94,7 @@ fn correct_one_lookahead() {
     Token {ttype: TokenType::EqualEqual, line: 4},
     Token {ttype: TokenType::RightBrace, line: 4},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
 
 #[ignore]
@@ -114,7 +114,7 @@ fn correct_strings() {
       String::from("lorem ipsum\n  asdf=\n  ")
     ), line: 2},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn correct_numbers() {
     Token {ttype: TokenType::Number(9.0), line: 2},
     Token {ttype: TokenType::Dot, line: 2},
     Token {ttype: TokenType::EOF, line: 2},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn correct_identifiers() {
     Token {ttype: TokenType::Dot, line: 2},
     Token {ttype: TokenType::Identifier(String::from("di4")), line: 2},
     Token {ttype: TokenType::EOF, line: 2},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
 
 #[test]
@@ -189,5 +189,5 @@ fn correct_reserved() {
     Token {ttype: TokenType::Identifier(String::from("andclass")), line: 3},
     Token {ttype: TokenType::Identifier(String::from("For")), line: 3},
     Token {ttype: TokenType::EOF, line: 3},
-    ], scan_tokens(source));
+    ], scan_tokens(source)?);
 }
