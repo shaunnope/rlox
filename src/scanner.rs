@@ -69,14 +69,12 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
 
       // slash
       '/' => {
-        if match_next(iter, &'/') {
-          while let Some(_) = iter.next() {
-            if match_next(iter, &'\n') {
-              break
-            }
+        if let Some(c) = iter.peek() {
+          match c {
+            '/' => consume_comment(iter), // single line comment
+            '*' => consume_block_comment(&mut line, iter), // block comment
+            _ => add_token(line, tokens, TokenType::Slash) // div operator
           }
-        } else {
-          add_token(line, tokens, TokenType::Slash)
         }
       }
       
@@ -239,4 +237,34 @@ fn get_token_type(lexeme: String) -> TokenType {
     "while" => TokenType::While,
     _ => TokenType::Identifier(lexeme)
   }
+}
+
+fn consume_comment(iter: &mut MultiPeek<Chars>) {
+  while let Some(_) = iter.next() {
+    if match_next(iter, &'\n') {
+      break
+    }
+  }
+}
+
+fn consume_block_comment(line: &mut i32, iter: &mut MultiPeek<Chars>) {
+  let pos = *line;
+  iter.next(); // consume first *
+  while let Some(ch) = iter.next() {
+    match ch {
+      '*' => {
+        if match_next(iter, &'/') { // end of block
+          iter.next();
+          return;
+        }
+      },
+      '\n' => { // inc line
+        *line += 1;
+      }
+      _ => continue,
+    }
+  }
+
+  // comment reached end of file
+  crate::error(pos, "Block comment not closed")
 }
