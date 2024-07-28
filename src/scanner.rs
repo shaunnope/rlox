@@ -1,5 +1,8 @@
-use std::{iter::Peekable, str::Chars};
+#[cfg(test)]
+mod tests;
 
+use std::str::Chars;
+use itertools::{Itertools, MultiPeek};
 use crate::token::{Token, TokenType};
 
 pub fn scan_tokens(source: &str) -> Vec<Token> {
@@ -10,7 +13,7 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
   let mut line = 1;
   // let mut start = 0;
 
-  let iter = &mut source.chars().peekable();
+  let iter = &mut source.chars().multipeek();
 
   while let Some(ch) = iter.next() {
     match ch {
@@ -67,7 +70,7 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
       // slash
       '/' => {
         if match_next(iter, &'/') {
-          while let Some(ch) = iter.next() {
+          while let Some(_) = iter.next() {
             if match_next(iter, &'\n') {
               break
             }
@@ -82,6 +85,24 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
 
       // newline
       '\n' => line += 1,
+
+      // string
+      '"' => {
+        let pos = line;
+        let s = parse_string(&mut line, iter);
+
+        add_token(pos, tokens, TokenType::String(s))
+      },
+
+      // number
+      '0'..='9' => {
+        if let Some(n) = parse_number(ch, iter) {
+          add_token(line, tokens, TokenType::Number(n));
+        } else {
+          crate::error(line, "Failed to parse number")
+        }
+      }
+
       _ => crate::error(line, "Unexpected character")
     };
     
@@ -101,7 +122,7 @@ pub fn scan_tokens(source: &str) -> Vec<Token> {
 //   // add_token(tokens, ttype)
 // }
 
-fn match_next(iter: &mut Peekable<Chars>, target: &char) -> bool {
+fn match_next(iter: &mut MultiPeek<Chars>, target: &char) -> bool {
   if let Some(c) = iter.peek() {
     return c == target
   }
@@ -114,6 +135,76 @@ fn match_next(iter: &mut Peekable<Chars>, target: &char) -> bool {
 
 fn add_token(line: i32, tokens: &mut Vec<Token>, ttype: TokenType) {
   tokens.push(Token {ttype, line});
-
 }
 
+fn parse_string(line: &mut i32, iter: &mut MultiPeek<Chars>) -> String {
+  iter
+    .by_ref().take_while(
+      |ch| match ch {
+        '"' => false,
+        '\n' => {
+          *line += 1;
+          true
+        }
+        _ => true
+      }
+    ).collect()
+}
+
+fn parse_number(start: char, iter: &mut MultiPeek<Chars>) -> Option<f64> {
+  let mut fractional = false;
+  let mut tail = vec![];
+
+  while let Some(ch) = iter.peek() {
+    match ch {
+      '0'..='9' => {
+        tail.push(*ch);
+        iter.next();
+      },
+      '.' => {
+        fractional = true;
+        break;
+      },
+      _ => break,
+    }
+  }
+  if !fractional {
+    return build_number(start, tail);
+  }
+
+  if let Some(ch) = iter.peek() {
+    match ch {
+      '0'..='9' => { // a valid decimal point
+        tail.push('.');
+        tail.push(*ch);
+        iter.next();
+        iter.next();
+      },
+      _ => { // not a decimal point. number complete
+        return build_number(start, tail);
+      }
+    }
+    // continue parsing number
+    while let Some(ch) = iter.peek() {
+      match ch {
+        '0'..='9' => {
+          tail.push(*ch);
+          iter.next();
+        },
+        _ => break,
+      }
+    }
+    return build_number(start, tail);
+  }
+
+  return build_number(start, tail);
+}
+
+fn build_number(start: char, tail: Vec<char>) -> Option<f64> {
+  let tail: String = tail.into_iter().collect();
+
+  match (String::from(start) + &tail).parse() {
+    Ok(n) => Some(n),
+    Err(_) => None
+  }
+}

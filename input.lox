@@ -1,3 +1,10 @@
 // this is a comment
 (( )){} // grouping stuff
-!*+-/=<> <= == // operators
+
+// operators
+!*+-/=<> <= ==
+"asdf" // single line string
+"lorem ipsum
+asdionh<asd
+\n"
+() * 12.6 2.3.1

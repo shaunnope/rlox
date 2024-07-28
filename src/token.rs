@@ -6,7 +6,7 @@ use std::fmt::{self, Display};
 mod tests;
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TokenType {
   // single character
   LeftParen, RightParen, LeftBrace, RightBrace,
@@ -19,7 +19,7 @@ pub enum TokenType {
   Less, LessEqual,
 
   // literals
-  Identifier(String), String(String), Integer(i32), Float(f32),
+  Identifier(String), String(String), Number(f64),
 
   // keywords
   And, Class, Else, False, Fun, For, If, Nil, Or,
@@ -84,13 +84,20 @@ impl Display for TokenType {
   }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Token {
   pub ttype: TokenType,
   pub line: i32
 }
 
+impl Token {
+  pub fn new(line: i32) -> Self {
+    Token {ttype: TokenType::Nil, line}
+  }
+}
+
 impl Display for Token {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{}", self.ttype)
+    write!(f, "{} {}", self.ttype, self.line)
   }
 }
