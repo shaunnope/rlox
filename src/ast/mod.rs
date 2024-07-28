@@ -1,7 +1,10 @@
+#[cfg(test)]
+mod tests;
+
 mod printer;
 
 use std::fmt;
-use crate::token::{Token, TokenType};
+use crate::token::Token;
 
 #[derive(Debug)]
 pub enum Expr {
@@ -15,6 +18,23 @@ pub enum Expr {
   Unary {
     op: Token,
     right: Box<Expr>
+  }
+}
+
+impl Expr {
+  #[allow(dead_code)]
+  /// Display for Reverse Polish Notation
+  fn rpn(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Literal(token) => return write!(f, "{}", token),
+      Self::Grouping(node) => return write!(f, "(group {})", node),
+      Self::Binary{left, op, right} => {
+        return write!(f, "{} {} {}", left, right, op)
+      },
+      Self::Unary{op, right} => {
+        return write!(f, "{} {}", right, op)
+      },
+    }
   }
 }
 
@@ -33,34 +53,3 @@ impl fmt::Display for Expr {
   }
 }
 
-
-pub fn example() {
-  let expression = Expr::Binary {
-      left: Box::new(Expr::Unary {
-          op: Token {
-              ttype: TokenType::Minus,
-              line: 1
-          },
-          right: Box::new(Expr::Literal(
-              Token {
-                  ttype: TokenType::Number(123.0),
-                  line: 1
-              }
-          ))
-      }),
-      op: Token {
-          ttype: TokenType::Star,
-          line: 1
-      },
-      right: Box::new(Expr::Grouping(
-          Box::new(Expr::Literal(
-              Token { 
-                  ttype: TokenType::Number(45.67), 
-                  line: 1 
-              }
-          ))
-      )),
-  };
-
-  println!("{expression}")
-}

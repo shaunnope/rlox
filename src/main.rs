@@ -1,11 +1,7 @@
 use std::env;
 use std::process;
 
-// use rlox::ast::example;
-
 fn main() {
-    // example();
-
     let _ = rlox::parse_args(env::args()).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments: {err}");
         process::exit(1);
