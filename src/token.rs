@@ -28,59 +28,55 @@ pub enum TokenType {
   EOF
 }
 
-// impl TokenType {
-//   pub fn get_literal(&self) -> &str {
-//     match self {
-//       Self::LeftParen => "(",
-//       Self::RightParen => ")",
-//       Self::LeftBrace => "{",
-//       Self::RightBrace => "}",
-//       Self::Comma => ",",
-//       Self::Dot => ".",
-//       Self::Minus => "-",
-//       Self::Plus => "+",
-//       Self::Semicolon => ";",
-//       Self::Slash => "\\",
-//       Self::Star => "*",
-
-//       Self::Bang => "!",
-//       Self::BangEqual => "!=",
-//       Self::Equal => "=",
-//       Self::EqualEqual => "==",
-//       Self::Greater => ">",
-//       Self::GreaterEqual => ">=",
-//       Self::Less => "<",
-//       Self::LessEqual => "<=",
-
-//       Self::Identifier(s) => s.as_str(),
-//       Self::String(s) => s.as_str(),
-//       Self::Integer(n) => format!("{n}"),
-//       Self::Float(n) => n.to_string().as_str(),
-      
-//       Self::And => "and",
-//       Self::Class => "class",
-//       Self::Else => "else",
-//       Self::False => "false",
-//       Self::Fun => "fun",
-//       Self::For => "for",
-//       Self::If => "if",
-//       Self::Nil => "nil",
-//       Self::Or => "or",
-//       Self::Print => "print",
-//       Self::Return => "return",
-//       Self::Super => "super",
-//       Self::This => "this",
-//       Self::True => "true",
-//       Self::Var => "let",
-//       Self::While => "while",
-//       Self::EOF => ""
-//     }
-//   }
-// }
+impl TokenType {
+  pub fn get_literal(&self) -> String {
+    match self {
+      Self::LeftParen => "(".to_string(),
+      Self::RightParen => ")".to_string(),
+      Self::LeftBrace => "{".to_string(),
+      Self::RightBrace => "}".to_string(),
+      Self::Comma => ",".to_string(),
+      Self::Dot => ".".to_string(),
+      Self::Minus => "-".to_string(),
+      Self::Plus => "+".to_string(),
+      Self::Semicolon => ";".to_string(),
+      Self::Slash => "/".to_string(),
+      Self::Star => "*".to_string(),
+      Self::Bang => "!".to_string(),
+      Self::BangEqual => "!=".to_string(),
+      Self::Equal => "=".to_string(),
+      Self::EqualEqual => "==".to_string(),
+      Self::Greater => ">".to_string(),
+      Self::GreaterEqual => ">=".to_string(),
+      Self::Less => "<".to_string(),
+      Self::LessEqual => "<=".to_string(),
+      Self::Identifier(s) => s.to_string(),
+      Self::String(s) => s.to_string(),
+      Self::Number(n) => n.to_string(),  
+      Self::And => "and".to_string(),
+      Self::Class => "class".to_string(),
+      Self::Else => "else".to_string(),
+      Self::False => "false".to_string(),
+      Self::Fun => "fun".to_string(),
+      Self::For => "for".to_string(),
+      Self::If => "if".to_string(),
+      Self::Nil => "nil".to_string(),
+      Self::Or => "or".to_string(),
+      Self::Print => "print".to_string(),
+      Self::Return => "return".to_string(),
+      Self::Super => "super".to_string(),
+      Self::This => "this".to_string(),
+      Self::True => "true".to_string(),
+      Self::Var => "let".to_string(),
+      Self::While => "while".to_string(),
+      Self::EOF => "".to_string()
+    }
+  }
+}
 
 impl Display for TokenType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{:?}", self)
+    write!(f, "{}", self.get_literal())
   }
 }
 
@@ -98,6 +94,6 @@ impl Token {
 
 impl Display for Token {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{} {}", self.ttype, self.line)
+    write!(f, "{}", self.ttype)
   }
 }

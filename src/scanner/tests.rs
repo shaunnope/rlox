@@ -10,6 +10,8 @@ fn comments_ignored() {
   //comment +3
   *+- .";
 
+  let tokens = scan_tokens(source).expect("Could not parse source");
+
   assert_eq!(vec![
     Token {ttype: TokenType::LeftParen, line: 1},
     Token {ttype: TokenType::LeftParen, line: 1},
@@ -18,7 +20,7 @@ fn comments_ignored() {
     Token {ttype: TokenType::Minus, line: 4},
     Token {ttype: TokenType::Dot, line: 4},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source)?);
+    ], tokens);
 }
 
 
@@ -28,6 +30,8 @@ fn correct_single_char_tokens() {
   let source = 
   "(( )){}
   *+- .;";
+
+  let tokens = scan_tokens(source).expect("Could not parse source");
 
   assert_eq!(vec![
     Token {ttype: TokenType::LeftParen, line: 1},
@@ -42,7 +46,7 @@ fn correct_single_char_tokens() {
     Token {ttype: TokenType::Dot, line: 2},
     Token {ttype: TokenType::Semicolon, line: 2},
     Token {ttype: TokenType::EOF, line: 2},
-    ], scan_tokens(source)?);
+    ], tokens);
 }
 
 #[ignore]
@@ -54,6 +58,8 @@ fn correct_space_delimited_variable_length_tokens() {
   <= >=
   = ==";
 
+  let tokens = scan_tokens(source).expect("Could not parse source");
+
   assert_eq!(vec![
     Token {ttype: TokenType::Bang, line: 1},
     Token {ttype: TokenType::BangEqual, line: 1},
@@ -64,7 +70,7 @@ fn correct_space_delimited_variable_length_tokens() {
     Token {ttype: TokenType::Equal, line: 4},
     Token {ttype: TokenType::EqualEqual, line: 4},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source)?);
+    ], tokens);
 }
 
 #[ignore]
@@ -75,6 +81,8 @@ fn correct_one_lookahead() {
   <.>.
   <=(>=)
   ={==}";
+
+  let tokens = scan_tokens(source).expect("Could not parse source");
 
   assert_eq!(vec![
     Token {ttype: TokenType::Bang, line: 1},
@@ -94,7 +102,7 @@ fn correct_one_lookahead() {
     Token {ttype: TokenType::EqualEqual, line: 4},
     Token {ttype: TokenType::RightBrace, line: 4},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source)?);
+    ], tokens);
 }
 
 #[ignore]
@@ -106,6 +114,8 @@ fn correct_strings() {
   asdf=
   \"";
 
+  let tokens = scan_tokens(source).expect("Could not parse source");
+
   assert_eq!(vec![
     Token {ttype: TokenType::Dot, line: 1},
     Token {ttype: TokenType::String(String::from("asdk+")), line: 1},
@@ -114,7 +124,7 @@ fn correct_strings() {
       String::from("lorem ipsum\n  asdf=\n  ")
     ), line: 2},
     Token {ttype: TokenType::EOF, line: 4},
-    ], scan_tokens(source)?);
+    ], tokens);
 }
 
 #[test]
@@ -122,6 +132,8 @@ fn correct_numbers() {
   let source = 
   "0 12 3.4 5+
   .23 4.5. 9.";
+
+  let tokens = scan_tokens(source).expect("Could not parse source");
 
   assert_eq!(vec![
     Token {ttype: TokenType::Number(0.0), line: 1},
@@ -136,7 +148,7 @@ fn correct_numbers() {
     Token {ttype: TokenType::Number(9.0), line: 2},
     Token {ttype: TokenType::Dot, line: 2},
     Token {ttype: TokenType::EOF, line: 2},
-    ], scan_tokens(source)?);
+    ], tokens);
 }
 
 #[test]
@@ -144,6 +156,8 @@ fn correct_identifiers() {
   let source = 
   "asd a012s_.
   ns_+0 asm.di4";
+
+  let tokens = scan_tokens(source).expect("Could not parse source");
 
   assert_eq!(vec![
     Token {ttype: TokenType::Identifier(String::from("asd")), line: 1},
@@ -156,7 +170,7 @@ fn correct_identifiers() {
     Token {ttype: TokenType::Dot, line: 2},
     Token {ttype: TokenType::Identifier(String::from("di4")), line: 2},
     Token {ttype: TokenType::EOF, line: 2},
-    ], scan_tokens(source)?);
+    ], tokens);
 }
 
 #[test]
@@ -165,6 +179,8 @@ fn correct_reserved() {
   "and class else false fun for
   if nil or print return super this true
   var while forest andclass For";
+
+  let tokens = scan_tokens(source).expect("Could not parse source");
 
   assert_eq!(vec![
     Token {ttype: TokenType::And, line: 1},
@@ -189,5 +205,5 @@ fn correct_reserved() {
     Token {ttype: TokenType::Identifier(String::from("andclass")), line: 3},
     Token {ttype: TokenType::Identifier(String::from("For")), line: 3},
     Token {ttype: TokenType::EOF, line: 3},
-    ], scan_tokens(source)?);
+    ], tokens);
 }

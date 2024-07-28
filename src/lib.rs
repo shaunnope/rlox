@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests;
 
-mod token;
-mod scanner;
-mod ast;
+pub mod token;
+pub mod scanner;
+pub mod ast;
 
 
 mod error; // custom error type
