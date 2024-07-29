@@ -5,7 +5,7 @@ use std::str::Chars;
 use itertools::{Itertools, MultiPeek};
 use crate::token::{Token, TokenType};
 
-use crate::error::{Error, ParseError};
+use crate::error::{Error, LoxError, Type};
 
 pub fn scan_tokens(source: &str) -> Result<Vec<Token>, Error> {
 
@@ -99,7 +99,7 @@ pub fn scan_tokens(source: &str) -> Result<Vec<Token>, Error> {
         if let Some(n) = parse_number(ch, iter) {
           add_token(line, tokens, TokenType::Number(n));
         } else {
-          ParseError::report(line, "", "Failed to parse number");
+          LoxError::report(Type::Parse, line, "", "Failed to parse number");
         }
       }
 
@@ -109,7 +109,7 @@ pub fn scan_tokens(source: &str) -> Result<Vec<Token>, Error> {
       }
 
       _ => {
-        ParseError::report(line, "","Unexpected character");
+        LoxError::report(Type::Parse, line, "","Unexpected character");
       }
     };
     
@@ -270,5 +270,5 @@ fn consume_block_comment(line: &mut i32, iter: &mut MultiPeek<Chars>) {
   }
 
   // comment reached end of file
-  ParseError::report(pos, "", "Block comment not closed")
+  LoxError::report(Type::Parse, pos, "", "Block comment not closed")
 }

@@ -2,7 +2,7 @@
 
 use std::fmt::{self, Display};
 
-use crate::error::ParseError;
+use crate::error::{LoxError, Type};
 
 #[cfg(test)]
 mod tests;
@@ -99,8 +99,8 @@ impl Token {
     Token {ttype: TokenType::Nil, line}
   }
 
-  pub fn error(&self, message: &str) -> Box<ParseError> {
-    let error = ParseError::new(self.line, &format!(" at {}", 
+  pub fn error(&self, message: &str) -> Box<LoxError> {
+    let error = LoxError::new(Type::Parse, self.line, &format!(" at {}", 
     if self.ttype == TokenType::EOF {
       "end".to_string()
     } else { format!("'{}'", self.ttype.lexeme())}), message);

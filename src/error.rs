@@ -6,30 +6,36 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static HAD_ERROR: AtomicBool = AtomicBool::new(false);
+fn set_flag() {
+  HAD_ERROR.store(true, Ordering::Relaxed);
+}
 
 pub type Error = Box<dyn error::Error>;
-pub trait ErrorTrait: error::Error {
-  fn report(&self) {
-    eprintln!("{self}");
-  }
+
+#[derive(Debug, Clone)]
+pub enum Type {
+  Parse,
+  Runtime
 }
 
 #[derive(Debug, Clone)]
-pub struct ParseError {
+pub struct LoxError {
+  pub err: Type,
   pub line: i32,
   pub pos: String,
   pub message: String,
 
 }
 
-impl ParseError {
-  pub fn new(line: i32, pos: &str, message: &str) -> Self {
-    HAD_ERROR.store(true, Ordering::Relaxed);
-    ParseError { line, pos: pos.to_string(), message: message.to_string() }
+impl LoxError {
+  pub fn new(err: Type, line: i32, pos: &str, message: &str) -> Self {
+    set_flag();
+
+    Self { err, line, pos: pos.to_string(), message: message.to_string() }
   }
 
-  pub fn report(line: i32, pos: &str, message: &str) {
-    eprintln!("{}", Self::new(line, pos, message));
+  pub fn report(err: Type, line: i32, pos: &str, message: &str) {
+    eprintln!("{}", Self::new(err, line, pos, message));
   }
 
   pub fn display(&self) {
@@ -37,11 +43,10 @@ impl ParseError {
   }
 }
 
-impl fmt::Display for ParseError {
+impl fmt::Display for LoxError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "[line {}] Error{}: {}", self.line, self.pos, self.message)
   }
 }
 
-impl error::Error for ParseError {}
-impl ErrorTrait for ParseError {}
+impl error::Error for LoxError {}
