@@ -6,12 +6,4 @@ fn main() {
         eprintln!("Problem parsing arguments: {err}");
         process::exit(1);
     });
-
-    // println!("Searching for {}", config.query);
-    // println!("In file {}", config.file_path);
-
-    // if let Err(e) = rlox::run(config) {
-    //     eprintln!("Application error: {e}");
-    //     process::exit(1);
-    // }
 }

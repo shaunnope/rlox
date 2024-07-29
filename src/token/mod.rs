@@ -56,9 +56,11 @@ impl TokenType {
       Self::GreaterEqual => ">=".to_string(),
       Self::Less => "<".to_string(),
       Self::LessEqual => "<=".to_string(),
+
       Self::Identifier(s) => s.to_string(),
       Self::String(s) => s.to_string(),
-      Self::Number(n) => n.to_string(),  
+      Self::Number(n) => n.to_string(),
+
       Self::And => "and".to_string(),
       Self::Class => "class".to_string(),
       Self::Else => "else".to_string(),

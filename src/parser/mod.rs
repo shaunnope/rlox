@@ -71,7 +71,26 @@ pub fn parse(tokens: Vec<Token>) -> Option<ast::Expr> {
 }
 
 fn expression(tokens: Tokens) -> MaybeExpr {
-  equality(tokens)
+  sequence(tokens)
+}
+
+fn sequence(state: Tokens) -> MaybeExpr {
+  let mut expr = equality(state)?;
+
+  loop {
+    let token = state.peek();
+    match token.ttype {
+      TokenType::Comma => {
+        state.advance();
+        let op = state.previous().clone();
+        let right = Box::new(expression(state)?);
+        expr = ast::Expr::Binary { left: Box::new(expr), op, right};
+      },
+      _ => break
+    }
+  }
+
+  Ok(expr)
 }
 
 fn equality(state: Tokens) -> MaybeExpr {
