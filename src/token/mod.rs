@@ -99,8 +99,8 @@ impl Token {
     Token {ttype: TokenType::Nil, line}
   }
 
-  pub fn error(&self, message: &str) -> Box<LoxError> {
-    let error = LoxError::new(Type::Parse, self.line, &format!(" at {}", 
+  pub fn error(&self, err: Type, message: &str) -> Box<LoxError> {
+    let error = LoxError::new(err, self.line, &format!(" at {}", 
     if self.ttype == TokenType::EOF {
       "end".to_string()
     } else { format!("'{}'", self.ttype.lexeme())}), message);

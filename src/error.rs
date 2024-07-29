@@ -15,7 +15,20 @@ pub type Error = Box<dyn error::Error>;
 #[derive(Debug, Clone)]
 pub enum Type {
   Parse,
-  Runtime
+  Runtime,
+  Arithmetic
+}
+
+#[derive(Debug, Clone)]
+pub struct PartialErr {
+  pub err: Type,
+  pub message: String
+}
+
+impl PartialErr {
+  pub fn new(err: Type, message: &str) -> Self {
+    Self { err, message: message.to_string() }
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +45,12 @@ impl LoxError {
     set_flag();
 
     Self { err, line, pos: pos.to_string(), message: message.to_string() }
+  }
+
+  pub fn from(part: PartialErr, line: i32, pos: &str) -> Self {
+    set_flag();
+
+    Self { err: part.err, line, pos: pos.to_string(), message: part.message }
   }
 
   pub fn report(err: Type, line: i32, pos: &str, message: &str) {

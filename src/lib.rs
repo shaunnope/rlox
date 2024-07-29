@@ -9,10 +9,10 @@ pub mod parser;
 
 mod error; // custom error type
 
-
 use std::fs;
 use std::io::{self, Write};
 use std::str;
+use std::any::Any;
 
 use error::Error;
 

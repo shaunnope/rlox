@@ -2,7 +2,7 @@
 use crate::token::{Token, TokenType};
 use crate::ast;
 
-use crate::error::Error;
+use crate::error::{Error, Type};
 
 struct State {
   tokens: Vec<Token>,
@@ -39,7 +39,7 @@ impl State {
       self.advance();
       return
     }
-    self.peek().error(message);
+    self.peek().error(Type::Parse, message);
   }
 
   /// Synchronise state to next statement boundary
@@ -199,7 +199,7 @@ fn primary(state: Tokens) -> MaybeExpr {
       state.consume(TokenType::RightParen, "Expect ')' after expression.");
       return Ok(ast::Expr::Grouping(expr))
     }
-    _ => Err(state.peek().error("Expect expression."))
+    _ => Err(state.peek().error(Type::Parse, "Expect expression."))
   }
 }
 
