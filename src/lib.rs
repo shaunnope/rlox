@@ -4,6 +4,7 @@ mod tests;
 pub mod token;
 pub mod scanner;
 pub mod ast;
+pub mod parser;
 
 
 mod error; // custom error type
@@ -26,9 +27,10 @@ fn run_file(path: &str) -> Result<(), Error> {
 
 fn run(source: &str) -> Result<(), Error> {
   // process source code
-  for token in scanner::scan_tokens(source)? {
-    println!("{token}");
-  };
+  let tokens = scanner::scan_tokens(source)?;
+  if let Some(expr) = parser::parse(tokens) {
+    println!("{}", expr);
+  }
 
   Ok(())
 }
@@ -72,14 +74,4 @@ pub fn parse_args(
   let _ = run_file(&file_path);
 
   Ok(())
-}
-
-pub fn error(line: i32, message: &str) {
-  report(line, "", message);
-}
-
-
-fn report(line: i32, at: &str, message: &str) {
-  eprintln!("[line {line}] Error {at}: {message}");
-  // error::set();
 }

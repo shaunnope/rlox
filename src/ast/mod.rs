@@ -4,11 +4,11 @@ mod tests;
 mod printer;
 
 use std::fmt;
-use crate::token::Token;
+use crate::token::{Token, TokenType};
 
 #[derive(Debug)]
 pub enum Expr {
-  Literal(Token),
+  Literal(TokenType),
   Grouping(Box<Expr>),
   Binary {
     left: Box<Expr>,

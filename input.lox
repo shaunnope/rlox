@@ -1,7 +1,7 @@
 // this is a comment
 var language = "lox";
 /* a block comment in one line */
-/* lor */
+/* lor
 em ipsum */
 fun forest(n) {
   var time = 0;

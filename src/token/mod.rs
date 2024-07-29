@@ -2,11 +2,13 @@
 
 use std::fmt::{self, Display};
 
+use crate::error::ParseError;
+
 #[cfg(test)]
 mod tests;
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
   // single character
   LeftParen, RightParen, LeftBrace, RightBrace,
@@ -29,7 +31,11 @@ pub enum TokenType {
 }
 
 impl TokenType {
-  pub fn get_literal(&self) -> String {
+  pub fn new() -> Self {
+    Self::Nil
+  }
+
+  pub fn lexeme(&self) -> String {
     match self {
       Self::LeftParen => "(".to_string(),
       Self::RightParen => ")".to_string(),
@@ -69,18 +75,18 @@ impl TokenType {
       Self::True => "true".to_string(),
       Self::Var => "let".to_string(),
       Self::While => "while".to_string(),
-      Self::EOF => "".to_string()
+      Self::EOF => "end".to_string()
     }
   }
 }
 
 impl Display for TokenType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{}", self.get_literal())
+    write!(f, "{}", self.lexeme())
   }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
   pub ttype: TokenType,
   pub line: i32
@@ -89,6 +95,15 @@ pub struct Token {
 impl Token {
   pub fn new(line: i32) -> Self {
     Token {ttype: TokenType::Nil, line}
+  }
+
+  pub fn error(&self, message: &str) -> Box<ParseError> {
+    let error = ParseError::new(self.line, &format!(" at {}", 
+    if self.ttype == TokenType::EOF {
+      "end".to_string()
+    } else { format!("'{}'", self.ttype.lexeme())}), message);
+    error.display();
+    Box::new(error)
   }
 }
 
