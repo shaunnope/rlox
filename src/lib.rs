@@ -5,14 +5,13 @@ pub mod token;
 pub mod scanner;
 pub mod ast;
 pub mod parser;
-
+pub mod interpreter;
 
 mod error; // custom error type
 
 use std::fs;
 use std::io::{self, Write};
 use std::str;
-use std::any::Any;
 
 use error::Error;
 
