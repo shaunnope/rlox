@@ -6,17 +6,23 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static HAD_ERROR: AtomicBool = AtomicBool::new(false);
-fn set_flag() {
-  HAD_ERROR.store(true, Ordering::Relaxed);
-}
+static HAD_RUNTIME_ERROR: AtomicBool = AtomicBool::new(false);
+
 
 pub type Error = Box<dyn error::Error>;
 
 #[derive(Debug, Clone)]
 pub enum Type {
   Parse,
-  Runtime,
-  Arithmetic
+  Runtime
+}
+
+fn set_flag(flag: &Type) {
+  match flag {
+    Type::Parse => HAD_ERROR.store(true, Ordering::Relaxed),
+    Type::Runtime => HAD_RUNTIME_ERROR.store(true, Ordering::Relaxed),
+  }
+  
 }
 
 #[derive(Debug, Clone)]
@@ -42,13 +48,13 @@ pub struct LoxError {
 
 impl LoxError {
   pub fn new(err: Type, line: i32, pos: &str, message: &str) -> Self {
-    set_flag();
+    set_flag(&err);
 
     Self { err, line, pos: pos.to_string(), message: message.to_string() }
   }
 
   pub fn from(part: PartialErr, line: i32, pos: &str) -> Self {
-    set_flag();
+    set_flag(&part.err);
 
     Self { err: part.err, line, pos: pos.to_string(), message: part.message }
   }
