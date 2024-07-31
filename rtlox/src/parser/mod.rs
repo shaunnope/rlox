@@ -45,7 +45,7 @@ impl Parser<'_> {
   fn parse_program(&mut self) -> Vec<Stmt> {
     let mut stmts = Vec::new();
     while !self.is_at_end() {
-      if let Some(expr) = self.parse_expr() {
+      if let Ok(expr) = self.parse_expr() {
         stmts.push(Stmt::from(stmt::Expr {
           span: expr.span(),
           expr,
@@ -64,13 +64,13 @@ impl Parser<'_> {
   // Expressions
   //
 
-  fn parse_expr(&mut self) -> Option<Expr> {
+  fn parse_expr(&mut self) -> PResult<Expr> {
     match self.parse_equality() {
-      Ok(expr) => Some(expr),
+      Ok(expr) => Ok(expr),
       Err(error) => {
         println!("{:?}", error);
-        self.diagnostics.push(error);
-        None
+        self.diagnostics.push(error.clone());
+        Err(error)
       }
     }
   }
@@ -139,18 +139,18 @@ impl Parser<'_> {
         let token = self.advance();
         Ok(Expr::from(expr::Lit::from(token.clone())))
       },
-      // LeftParen => {
-      //   let (expr, span) = self.paired_spanned(
-      //     LeftParen,
-      //     S_MUST,
-      //     "Expected group to be closed",
-      //     |this| this.parse_expr(),
-      //   )?;
-      //   Ok(Expr::from(expr::Group {
-      //     span,
-      //     expr: expr.into(),
-      //   }))
-      // }
+      LeftParen => {
+        let (expr, span) = self.paired_spanned(
+          LeftParen,
+          S_MUST,
+          "Expected group to be closed",
+          |this| this.parse_expr(),
+        )?;
+        Ok(Expr::from(expr::Group {
+          span,
+          expr: expr.into(),
+        }))
+      }
       _ => Err(self.unexpected("Expected any expression", None)),
     }
   }
