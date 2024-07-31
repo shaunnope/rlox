@@ -122,11 +122,22 @@ impl Interpreter {
 
       TokenType::Minus => bin_num_op!(left - right, binary.operator),
       TokenType::Star => bin_num_op!(left * right, binary.operator),
-      TokenType::Slash => bin_num_op!(left / right, binary.operator),
+      TokenType::Slash => {
+        // TODO: enable/disable division by zero with env var
+        if let Number(divisor) = right {
+          if divisor == 0.0 {
+            return Err(RuntimeError::ZeroDivision { 
+              span: binary.operator.span 
+            }.into())
+          }
+        }
+        bin_num_op!(left / right, binary.operator)
+      },
 
       TokenType::Plus => match (left, right) {
         (Number(left), Number(right)) => Ok(Number(left + right)),
         (String(left), String(right)) => Ok(String(left + &right)),
+        // extended string concat
         (String(left), right) => Ok(String(left + &right.to_string())),
         (left, right) => Err(
           RuntimeError::UnsupportedType {
