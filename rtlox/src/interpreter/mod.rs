@@ -135,8 +135,9 @@ impl Interpreter {
             right.type_name()
           ),
           span: binary.operator.span,
-        }.into()),
-    },
+        }.into())
+      },
+      TokenType::Comma => Ok(right),
 
       unexpected => unreachable!("Invalid binary operator ({:?}).", unexpected),
     }

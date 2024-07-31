@@ -65,7 +65,7 @@ impl Parser<'_> {
   //
 
   fn parse_expr(&mut self) -> PResult<Expr> {
-    match self.parse_equality() {
+    match self.parse_sequence() {
       Ok(expr) => Ok(expr),
       Err(error) => {
         println!("{:?}", error);
@@ -75,12 +75,24 @@ impl Parser<'_> {
     }
   }
 
-  // fn parse_sequence(&mut self) -> PResult<Expr> {
-  //   let mut expr = self.parse_equality();
-  //   loop {
-  //     if self.take(TokenType::Comma) {}
-  //   }
-  // }
+  fn parse_sequence(&mut self) -> PResult<Expr> {
+    let mut expr = self.parse_equality()?;
+    loop {
+      if self.take(TokenType::Comma) {
+        let operator = self.prev_token.clone();
+        let right = self.parse_expr()?;
+        expr = Expr::from(expr::Binary{
+          span: operator.span,
+          left: expr.into(),
+          operator,
+          right: right.into()
+        })
+
+      } else {
+        break Ok(expr)
+      }
+    }
+  }
 
   fn parse_equality(&mut self) -> PResult<Expr> {
     bin_expr!(
