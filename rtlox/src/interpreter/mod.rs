@@ -8,7 +8,7 @@ use crate::{
   data::LoxValue,
   interpreter::{control_flow::ControlFlow, environment::Environment, error::RuntimeError},
   span::Span,
-  token::TokenType,
+  token::{Token, TokenType},
 };
 
 pub mod control_flow;
@@ -56,6 +56,8 @@ impl Interpreter {
     use Stmt::*;
     match &stmt {
       VarDecl(var) => self.eval_var_decl(var),
+      If(if_stmt) => self.eval_if_stmt(if_stmt),
+      While(while_stmt) => self.eval_while_stmt(while_stmt),
       Print(print) => self.eval_print_stmt(print),
       Block(block) => self.eval_block(block, Environment::new_enclosed(&self.env)),
       Expr(expr) => self.eval_expr(&expr.expr).map(drop),
@@ -72,6 +74,22 @@ impl Interpreter {
 
     self.env.define(var.name.clone(), value);
 
+    Ok(())
+  }
+
+  fn eval_if_stmt(&mut self, stmt: &stmt::If) -> CFResult<()> {
+    if self.eval_expr(&stmt.cond)?.truth() {
+      self.eval_stmt(&stmt.then_branch)?;
+    } else if let Some(br) = &stmt.else_branch {
+      self.eval_stmt(br)?;
+    }
+    Ok(())
+  }
+
+  fn eval_while_stmt(&mut self, stmt: &stmt::While) -> CFResult<()> {
+    while self.eval_expr(&stmt.cond)?.truth() {
+      self.eval_stmt(&stmt.body)?;
+    }
     Ok(())
   }
 
@@ -194,7 +212,11 @@ impl Interpreter {
 
   fn eval_logical_expr(&mut self, logical: &expr::Logical) -> CFResult<LoxValue> {
     let left = self.eval_expr(&logical.left)?;
-    Ok(left)
+    match &logical.operator.kind {
+      TokenType::And if !left.truth() => Ok(left),
+      TokenType::Or if left.truth() => Ok(left),
+      _ => self.eval_expr(&logical.right)
+    }
   }
 
   fn eval_assignemnt(&mut self, assign: &expr::Assignment) -> CFResult<LoxValue> {

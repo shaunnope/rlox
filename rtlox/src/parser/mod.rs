@@ -5,7 +5,7 @@ use crate::{
     expr::{self, Expr},
     stmt::{self, Stmt},
   },
-  data::LoxIdent,
+  data::{LoxIdent, LoxValue},
   parser::{error::ParseError, scanner::Scanner, state::ParserOptions},
   span::Span,
   token::{Token, TokenType},
@@ -90,6 +90,9 @@ impl Parser<'_> {
   fn parse_stmt(&mut self) -> PResult<Stmt> {
     use TokenType::*;
     match self.current_token.kind {
+      If => self.parse_if_stmt(),
+      While => self.parse_while_stmt(),
+      For => self.parse_for_stmt(),
       Print => self.parse_print_stmt(),
       LeftBrace => {
         let (stmts, span) = self.parse_block()?;
@@ -97,6 +100,121 @@ impl Parser<'_> {
       }
       _ => self.parse_expr_stmt(),
     }
+  }
+
+  fn parse_if_stmt(&mut self) -> PResult<Stmt> {
+    let if_span = self.consume(TokenType::If, S_MUST)?.span;
+    let (cond, span) = self.paired_spanned(
+      TokenType::LeftParen,
+      "Expected '(' after 'if'.",
+      "Expected ')' after if condition.",
+      |this| this.parse_expr(),
+    )?;
+
+    let then_branch = self.parse_stmt()?;
+    let else_branch = match self.take(TokenType::Else) {
+      true => Some(Box::new(self.parse_stmt()?)),
+      false => None
+    };
+
+    Ok(Stmt::from(stmt::If {
+      span: if_span.to(match &else_branch {
+        Some(br) => br.span(),
+        None => then_branch.span()
+      }),
+      cond,
+      then_branch: then_branch.into(),
+      else_branch
+    }))
+  }
+
+  fn parse_while_stmt(&mut self) -> PResult<Stmt> {
+    let while_span = self.consume(TokenType::While, S_MUST)?.span;
+    let (cond, span) = self.paired_spanned(
+      TokenType::LeftParen,
+      "Expected '(' after 'if'.",
+      "Expected ')' after if condition.",
+      |this| this.parse_expr(),
+    )?;
+
+    let body = self.parse_stmt()?;
+    Ok(Stmt::from(stmt::While {
+      span: while_span.to(body.span()),
+      cond, 
+      body: body.into()
+    }))
+  }
+
+  /// Desugars `for` loop syntax into other known statements
+  fn parse_for_stmt(&mut self) -> PResult<Stmt> {
+    use TokenType::*;
+    let for_span = self.consume(For, S_MUST)?.span;
+    
+    let (init, cond, incr) = self.paired(
+      LeftParen,
+      "Expected `(` after `for`",
+      "Expected `)` to close `for` group",
+      |this| {
+        let init = match this.current_token.kind {
+          Semicolon => {
+            this.advance();
+            None
+          }
+          Var => Some(this.parse_var_decl()?),
+          _ => Some(this.parse_expr_stmt()?)
+        };
+
+        let cond = match this.current_token.kind {
+          Semicolon => {
+            // No condition => while true
+            let lo = this.current_token.span.0;
+            Expr::from(expr::Lit {
+              span: Span::new(lo, lo),
+              value: LoxValue::Boolean(true)
+            })
+          },
+          _ => this.parse_expr()?
+        };
+        this.consume(Semicolon, "Expected `;` after `for` condition")?;
+
+        let incr = match this.current_token.kind {
+          RightParen => None,
+          _ => Some(this.parse_expr()?)
+        };
+        
+        Ok((init, cond, incr))
+      }
+    )?;
+
+    let mut body = self.parse_stmt()?;
+
+    // Desugar increment
+    if let Some(incr) = incr {
+      body = Stmt::from(stmt::Block {
+        span: body.span(),
+        stmts: vec![body, Stmt::from(stmt::Expr {
+          span: incr.span(),
+          expr: incr,
+        })]
+      })
+    }
+
+    // while
+    body = Stmt::from(stmt::While {
+      span: for_span.to(body.span()),
+      cond,
+      body: body.into()
+    });
+
+    // initializer
+    if let Some(init) = init {
+      body = Stmt::from(stmt::Block {
+        span: body.span(),
+        stmts: vec![init, body]
+      })
+    }    
+
+    Ok(body)
   }
 
   fn parse_print_stmt(&mut self) -> PResult<Stmt> {
@@ -184,7 +302,7 @@ impl Parser<'_> {
   }
 
   fn parse_sequence(&mut self) -> PResult<Expr> {
-    let mut expr = self.parse_equality()?;
+    let mut expr = self.parse_or()?;
     loop {
       if self.take(TokenType::Comma) {
         let operator = self.prev_token.clone();
@@ -199,6 +317,24 @@ impl Parser<'_> {
         break Ok(expr);
       }
     }
+  }
+  
+  fn parse_or(&mut self) -> PResult<Expr> {
+    bin_expr!(
+      self,
+      parse_as = Logical,
+      token_kinds = Or,
+      next_production = parse_and
+    )
+  }
+
+  fn parse_and(&mut self) -> PResult<Expr> {
+    bin_expr!(
+      self,
+      parse_as = Logical,
+      token_kinds = And,
+      next_production = parse_equality
+    )
   }
 
   fn parse_equality(&mut self) -> PResult<Expr> {
