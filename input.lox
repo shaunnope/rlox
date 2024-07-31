@@ -1,10 +1,6 @@
-// this is a comment
-var language = "lox";
-/* a block comment in one line */
-/* lor
-em ipsum */
-fun forest(n) {
-  var time = 0;
-  while (time < 5) time = time + 1;
-  return false
+var a = 1;
+{
+  var a = a + 2;
+  print a;
 }
+print a;

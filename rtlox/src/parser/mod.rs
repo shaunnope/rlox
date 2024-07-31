@@ -5,8 +5,7 @@ use crate::{
     expr::{self, Expr},
     stmt::{self, Stmt},
   },
-  // data::{LoxIdent, LoxValue},
-  // data::LoxValue,
+  data::LoxIdent,
   parser::{error::ParseError, scanner::Scanner, state::ParserOptions},
   span::Span,
   token::{Token, TokenType},
@@ -34,44 +33,154 @@ impl Parser<'_> {
     (self.parse_program(), self.diagnostics)
   }
 
-  // fn parse_program(&mut self) -> Vec<Stmt> {
-  //   let mut stmts = Vec::new();
-  //   while !self.is_at_end() {
-  //     stmts.push(self.parse_decl());
-  //   }
-  //   stmts
-  // }
-
   fn parse_program(&mut self) -> Vec<Stmt> {
     let mut stmts = Vec::new();
     while !self.is_at_end() {
-      if let Ok(expr) = self.parse_expr() {
-        stmts.push(Stmt::from(stmt::Expr {
-          span: expr.span(),
-          expr,
-        }))
-      }
-      // stmts.push(self.parse_decl());
+      stmts.push(self.parse_decl());
     }
     stmts
+  }
+
+  //
+  // Declarations
+  //
+
+  fn parse_decl(&mut self) -> Stmt {
+    use TokenType::*;
+    let res = match self.current_token.kind {
+      Var => self.parse_var_decl(),
+      _ => self.parse_stmt(),
+    };
+
+    match res {
+      Ok(stmt) => stmt,
+      Err(err) => {
+        self.diagnostics.push(err);
+        self.sync();
+        let lo = self.current_token.span.0;
+        Stmt::from(stmt::Dummy {
+          span: Span::new(lo, lo),
+        })
+      }
+    }
+  }
+
+  fn parse_var_decl(&mut self) -> PResult<Stmt> {
+    use TokenType::*;
+    let var_span = self.consume(Var, S_MUST)?.span;
+
+    let name = self.consume_ident("")?;
+    let init = self.take(Equal).then(|| self.parse_expr()).transpose()?;
+
+    let semicolon_span = self
+      .consume(Semicolon, "Expected `;` after variable declaration.")?
+      .span;
+
+    Ok(Stmt::from(stmt::VarDecl {
+      span: var_span.to(semicolon_span),
+      name,
+      init,
+    }))
   }
 
   //
   // Statements
   //
 
+  fn parse_stmt(&mut self) -> PResult<Stmt> {
+    use TokenType::*;
+    match self.current_token.kind {
+      Print => self.parse_print_stmt(),
+      LeftBrace => {
+        let (stmts, span) = self.parse_block()?;
+        Ok(Stmt::from(stmt::Block { span, stmts }))
+      }
+      _ => self.parse_expr_stmt(),
+    }
+  }
+
+  fn parse_print_stmt(&mut self) -> PResult<Stmt> {
+    let print_token_span = self.consume(TokenType::Print, S_MUST)?.span;
+    let expr = self.parse_expr()?;
+    let semicolon_span = self
+      .consume(TokenType::Semicolon, "Expected `;` after value.")?
+      .span;
+
+    Ok(Stmt::from(stmt::Print {
+      span: print_token_span.to(semicolon_span),
+      expr,
+      debug: false,
+    }))
+  }
+
+  fn parse_block(&mut self) -> PResult<(Vec<Stmt>, Span)> {
+    self.paired_spanned(
+      TokenType::LeftBrace,
+      "Expected block to be opened",
+      "Expected block to be closed",
+      |this| {
+        let mut stmts = Vec::new();
+        while !this.is(TokenType::RightBrace) && !this.is_at_end() {
+          stmts.push(this.parse_decl());
+        }
+        Ok(stmts)
+      },
+    )
+  }
+
+  fn parse_expr_stmt(&mut self) -> PResult<Stmt> {
+    let expr = self.parse_expr()?;
+
+    // QOL: In repl mode, expressions that do not end with a
+    // `;` are evaluated and printed
+    if self.options.repl_mode && self.is_at_end() {
+      return Ok(Stmt::from(stmt::Print {
+        span: expr.span(),
+        expr,
+        debug: true,
+      }));
+    }
+
+    let semicolon_span = self
+      .consume(TokenType::Semicolon, "Expected `;` after expression.")?
+      .span;
+    Ok(Stmt::from(stmt::Expr {
+      span: expr.span().to(semicolon_span),
+      expr,
+    }))
+  }
+
   //
   // Expressions
   //
 
   fn parse_expr(&mut self) -> PResult<Expr> {
-    match self.parse_sequence() {
-      Ok(expr) => Ok(expr),
-      Err(error) => {
-        self.diagnostics.push(error.clone());
-        Err(error)
+    self.parse_assignment()
+  }
+
+  fn parse_assignment(&mut self) -> PResult<Expr> {
+    let left = self.parse_sequence()?;
+
+    // expression above is an l-value
+    if self.take(TokenType::Equal) {
+      let value = self.parse_assignment()?;
+      let span = left.span().to(value.span());
+
+      if let Expr::Var(expr::Var { name, .. }) = left {
+        return Ok(Expr::from(expr::Assignment {
+          span,
+          name,
+          value: value.into(),
+        }));
       }
+
+      return Err(ParseError::Error {
+        message: "Invalid assignment target.".into(),
+        span: left.span(),
+      });
     }
+
+    Ok(left)
   }
 
   fn parse_sequence(&mut self) -> PResult<Expr> {
@@ -148,6 +257,13 @@ impl Parser<'_> {
       String(_) | Number(_) | True | False | Nil => {
         let token = self.advance();
         Ok(Expr::from(expr::Lit::from(token.clone())))
+      }
+      Identifier(_) => {
+        let name = self.consume_ident(S_MUST)?;
+        Ok(Expr::from(expr::Var {
+          span: name.span,
+          name,
+        }))
       }
       LeftParen => {
         let (expr, span) =
@@ -228,6 +344,17 @@ impl<'src> Parser<'src> {
     }
   }
 
+  /// Checks if the current token is an identifier. In such case advances and returns `Ok(_)` with
+  /// the parsed identifier. Otherwise returns an expectation error with the provided message.
+  fn consume_ident(&mut self, msg: impl Into<String>) -> PResult<LoxIdent> {
+    let expected = TokenType::Identifier("<ident>".into());
+    if self.is(&expected) {
+      Ok(LoxIdent::from(self.advance().clone()))
+    } else {
+      Err(self.unexpected(msg, Some(expected)))
+    }
+  }
+
   /// Pair invariant.
   fn paired<I, R>(
     &mut self,
@@ -280,6 +407,25 @@ impl<'src> Parser<'src> {
       message: message.into(),
       expected,
       offending: self.current_token.clone(),
+    }
+  }
+
+  /// Synchronizes parser state to the next statement boundary (generally denoted by `;`)
+  ///
+  /// TODO: Refactor token types into groups
+  fn sync(&mut self) {
+    use TokenType::*;
+    while !self.is_at_end() {
+      match &self.current_token.kind {
+        Semicolon => {
+          self.advance();
+          return;
+        }
+        Class | For | Fun | If | Print | Return | Var | While => {
+          return;
+        }
+        _ => self.advance(),
+      };
     }
   }
 

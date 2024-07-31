@@ -1,11 +1,10 @@
 // mod eq;
 
 use std::fmt::{self, Debug, Display};
+use std::sync::atomic::{self, AtomicUsize};
 
-/// A dynamic type representation of lox values.
-///
-/// None for lox's nil
-// pub type Evaluation = Option<Box<dyn eq::DynEq>>;
+use crate::span::Span;
+use crate::token::{Token, TokenType};
 
 #[derive(Clone)]
 pub enum LoxValue {
@@ -13,6 +12,7 @@ pub enum LoxValue {
   Number(f64),
   String(String),
   Nil,
+  Unset,
 }
 
 impl LoxValue {
@@ -24,6 +24,7 @@ impl LoxValue {
       Number(_) => "number",
       String(_) => "string",
       Nil => "nil",
+      Unset => "<unset>",
     }
   }
 
@@ -34,6 +35,7 @@ impl LoxValue {
       Boolean(inner) => *inner,
       Number(_) | String(_) => true,
       Nil => false,
+      Unset => unreachable!("Invalid access of unset variable."),
     }
   }
 
@@ -64,6 +66,7 @@ impl Display for LoxValue {
       }
       String(string) => f.write_str(string),
       Nil => f.write_str("nil"),
+      Unset => f.write_str("<unset>"),
     }
   }
 }
@@ -75,5 +78,64 @@ impl Debug for LoxValue {
       String(s) => write!(f, "\"{}\"", s),
       other => Display::fmt(other, f),
     }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxIdent {
+  pub id: LoxIdentId,
+  pub name: String,
+  pub span: Span,
+}
+
+// global state:
+static LOX_IDENT_ID_SEQ: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct LoxIdentId(usize);
+
+impl LoxIdentId {
+  pub fn new() -> Self {
+    LoxIdentId(LOX_IDENT_ID_SEQ.fetch_add(1, atomic::Ordering::SeqCst))
+  }
+}
+
+impl LoxIdent {
+  pub fn new(span: Span, name: impl Into<String>) -> Self {
+    LoxIdent {
+      id: LoxIdentId::new(),
+      name: name.into(),
+      span,
+    }
+  }
+}
+
+impl From<Token> for LoxIdent {
+  fn from(Token { kind, span }: Token) -> Self {
+    match kind {
+      TokenType::Identifier(name) => LoxIdent::new(span, name),
+      unexpected => unreachable!(
+        "Invalid `Token` ({:?}) to `LoxIdent` conversion.",
+        unexpected
+      ),
+    }
+  }
+}
+
+impl AsRef<str> for LoxIdent {
+  fn as_ref(&self) -> &str {
+    &self.name
+  }
+}
+
+impl From<LoxIdent> for String {
+  fn from(ident: LoxIdent) -> Self {
+    ident.name
+  }
+}
+
+impl Display for LoxIdent {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str(&self.name)
   }
 }

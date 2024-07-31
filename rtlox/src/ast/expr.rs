@@ -1,10 +1,23 @@
 use crate::{
-  data::LoxValue,
+  data::{LoxIdent, LoxValue},
   span::Span,
   token::{Token, TokenType},
 };
 
-make_ast_enum!(Expr, [Lit, Group, Unary, Binary, Logical]);
+make_ast_enum!(Expr, [Assignment, Var, Lit, Group, Unary, Binary, Logical]);
+
+#[derive(Debug, Clone)]
+pub struct Assignment {
+  pub span: Span,
+  pub name: LoxIdent,
+  pub value: Box<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Var {
+  pub span: Span,
+  pub name: LoxIdent,
+}
 
 #[derive(Debug, Clone)]
 pub struct Lit {

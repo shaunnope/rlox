@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::str;
 
+// use crate::interpreter::environment::Environment;
 use crate::interpreter::{self, Interpreter};
 use crate::parser::{Parser, ParserOutcome};
 
@@ -16,14 +17,14 @@ fn handle_parser_outcome(
   // parse errors
   if !errors.is_empty() {
     for error in errors {
-      eprintln!("{:?}", error);
+      eprintln!("{}", error);
     }
     return false;
   }
 
   // interpreter
   if let Err(error) = interpreter.interpret(stmts) {
-    eprintln!("{:?}\n", error);
+    eprintln!("{}", error);
     // print_span_window(writer, src, error.primary_span());
     return false;
   }
@@ -32,22 +33,25 @@ fn handle_parser_outcome(
 
 pub fn run_file(file: impl AsRef<Path>) -> io::Result<bool> {
   let src = &fs::read_to_string(file)?;
-  let mut interpreter = Interpreter {};
+  let mut interpreter = Interpreter::new();
 
-  Ok(run(src, &mut interpreter))
+  Ok(run(src, &mut interpreter, false))
 }
 
-fn run(src: &str, interpreter: &mut Interpreter) -> bool {
-  // process source code
-  let outcome = Parser::new(src).parse();
+/// Processe Lox source code
+fn run(src: &str, interpreter: &mut Interpreter, is_repl: bool) -> bool {
+  let mut parser = Parser::new(src);
+  parser.options.repl_mode = is_repl;
+
+  let outcome = parser.parse();
 
   handle_parser_outcome(&outcome, interpreter)
 }
 
+/// REPL mode
 pub fn run_repl() {
-  // REPL mode
   println!("Entering interactive mode...");
-  let mut interpreter = Interpreter {};
+  let mut interpreter = Interpreter::new();
 
   loop {
     let mut line = String::new();
@@ -58,7 +62,7 @@ pub fn run_repl() {
       .read_line(&mut line)
       .expect("Failed to read line");
 
-    if !run(&line, &mut interpreter) {
+    if !run(&line, &mut interpreter, true) {
       continue;
     };
   }

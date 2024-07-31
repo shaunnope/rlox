@@ -1,4 +1,3 @@
-
 /// Checks if the given char is valid as an identifier's start character.
 #[inline]
 pub fn is_valid_identifier_start(c: char) -> bool {

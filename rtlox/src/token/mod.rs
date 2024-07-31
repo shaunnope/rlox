@@ -111,7 +111,7 @@ impl From<&str> for TokenType {
       "print" => Print,
       // "typeof" => Typeof,
       // "show" => Show,
-      identifier => Identifier(identifier.to_string()) 
+      identifier => Identifier(identifier.to_string()),
     }
   }
 }
