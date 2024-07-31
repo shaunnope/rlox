@@ -54,13 +54,13 @@ impl Interpreter {
         match &res {
           Ok(val) => {
             println!("{:?}", &val);
-          },
+          }
           Err(ControlFlow::Return(val)) => println!("{:?}", &val),
           Err(ControlFlow::Err(err)) => println!("{:?}", &err),
         };
         // println!("{:?}", res);
         res.map(drop)
-      },
+      }
       Dummy(_) => unreachable!(),
       _ => Ok(()),
     }
@@ -123,19 +123,23 @@ impl Interpreter {
       TokenType::Minus => bin_num_op!(left - right, binary.operator),
       TokenType::Star => bin_num_op!(left * right, binary.operator),
       TokenType::Slash => bin_num_op!(left / right, binary.operator),
-      
+
       TokenType::Plus => match (left, right) {
         (Number(left), Number(right)) => Ok(Number(left + right)),
         (String(left), String(right)) => Ok(String(left + &right)),
-        (left, right) => Err(RuntimeError::UnsupportedType {
-          message: format!(
-            "Binary `+` operator can only operate over two numbers or two strings. \
+        (String(left), right) => Ok(String(left + &right.to_string())),
+        (left, right) => Err(
+          RuntimeError::UnsupportedType {
+            message: format!(
+              "Binary `+` operator can only operate over two numbers or two strings. \
             Got types `{}` and `{}`",
-            left.type_name(),
-            right.type_name()
-          ),
-          span: binary.operator.span,
-        }.into())
+              left.type_name(),
+              right.type_name()
+            ),
+            span: binary.operator.span,
+          }
+          .into(),
+        ),
       },
       TokenType::Comma => Ok(right),
 

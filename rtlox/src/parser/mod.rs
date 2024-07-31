@@ -68,7 +68,6 @@ impl Parser<'_> {
     match self.parse_sequence() {
       Ok(expr) => Ok(expr),
       Err(error) => {
-        println!("{:?}", error);
         self.diagnostics.push(error.clone());
         Err(error)
       }
@@ -81,15 +80,14 @@ impl Parser<'_> {
       if self.take(TokenType::Comma) {
         let operator = self.prev_token.clone();
         let right = self.parse_expr()?;
-        expr = Expr::from(expr::Binary{
+        expr = Expr::from(expr::Binary {
           span: operator.span,
           left: expr.into(),
           operator,
-          right: right.into()
+          right: right.into(),
         })
-
       } else {
-        break Ok(expr)
+        break Ok(expr);
       }
     }
   }
@@ -150,14 +148,12 @@ impl Parser<'_> {
       String(_) | Number(_) | True | False | Nil => {
         let token = self.advance();
         Ok(Expr::from(expr::Lit::from(token.clone())))
-      },
+      }
       LeftParen => {
-        let (expr, span) = self.paired_spanned(
-          LeftParen,
-          S_MUST,
-          "Expected group to be closed",
-          |this| this.parse_expr(),
-        )?;
+        let (expr, span) =
+          self.paired_spanned(LeftParen, S_MUST, "Expected group to be closed", |this| {
+            this.parse_expr()
+          })?;
         Ok(Expr::from(expr::Group {
           span,
           expr: expr.into(),
@@ -239,43 +235,43 @@ impl<'src> Parser<'src> {
     delim_start_expectation: impl Into<String>,
     delim_end_expectation: impl Into<String>,
     inner: I,
-) -> PResult<R>
-where
+  ) -> PResult<R>
+  where
     I: FnOnce(&mut Self) -> PResult<R>,
-{
-    self.paired_spanned(
+  {
+    self
+      .paired_spanned(
         delim_start,
         delim_start_expectation,
         delim_end_expectation,
         inner,
-    )
-    .map(|(ret, _)| ret)
-}
+      )
+      .map(|(ret, _)| ret)
+  }
 
-/// Pair invariant (2), also returning the full span.
-fn paired_spanned<I, R>(
+  /// Pair invariant (2), also returning the full span.
+  fn paired_spanned<I, R>(
     &mut self,
     delim_start: TokenType,
     delim_start_expectation: impl Into<String>,
     delim_end_expectation: impl Into<String>,
     inner: I,
-) -> PResult<(R, Span)>
-where
+  ) -> PResult<(R, Span)>
+  where
     I: FnOnce(&mut Self) -> PResult<R>,
-{
+  {
     let start_span = self
-        .consume(delim_start.clone(), delim_start_expectation)?
-        .span;
+      .consume(delim_start.clone(), delim_start_expectation)?
+      .span;
     let ret = inner(self)?;
     let end_span = match self.consume(delim_start.get_pair(), delim_end_expectation) {
-        Ok(token) => token.span,
-        Err(error) => {
-            return Err(error);
-        }
+      Ok(token) => token.span,
+      Err(error) => {
+        return Err(error);
+      }
     };
     Ok((ret, start_span.to(end_span)))
-}
-
+  }
 
   /// Returns an `ParseError::UnexpectedToken`.
   #[inline(always)]

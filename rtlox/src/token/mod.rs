@@ -89,6 +89,33 @@ impl TokenType {
   }
 }
 
+impl From<&str> for TokenType {
+  fn from(value: &str) -> Self {
+    use TokenType::*;
+    match value {
+      "nil" => Nil,
+      "true" => True,
+      "false" => False,
+      "this" => This,
+      "super" => Super,
+      "class" => Class,
+      "and" => And,
+      "or" => Or,
+      "if" => If,
+      "else" => Else,
+      "return" => Return,
+      "fun" => Fun,
+      "for" => For,
+      "while" => While,
+      "var" => Var,
+      "print" => Print,
+      // "typeof" => Typeof,
+      // "show" => Show,
+      identifier => Identifier(identifier.to_string()) 
+    }
+  }
+}
+
 impl Display for TokenType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     use TokenType::*;

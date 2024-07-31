@@ -2,13 +2,14 @@
 // mod tests;
 
 use crate::{
-  parser::scanner::error::ScanError,
+  parser::scanner::{error::ScanError, identifier::*},
   span::Span,
   token::{Token, TokenType},
   // error::{Error, LoxError, Type}
 };
 
 pub mod error;
+pub mod identifier;
 
 pub struct Scanner<'src> {
   src: &'src str,
@@ -63,7 +64,7 @@ impl Scanner<'_> {
       '/' => self.comment_or_slash(),
       c if c.is_ascii_digit() => self.number(),
       c if c.is_ascii_whitespace() => self.whitespace(),
-      // c if is_valid_identifier_start(c) => self.identifier_or_keyword(),
+      c if is_valid_identifier_start(c) => self.identifier_or_keyword(),
       unexpected => Error(ScanError::UnexpectedChar(unexpected)),
     }
   }
@@ -139,6 +140,18 @@ impl Scanner<'_> {
       self.advance();
     }
     TokenType::Whitespace(self.lex(0, 0).into())
+  }
+
+  /// Scans a keyword or an identifier.
+  fn identifier_or_keyword(&mut self) -> TokenType {
+    while is_valid_identifier_tail(self.current()) {
+      self.advance();
+    }
+    let name = self.lex(0, 0);
+    if name == "NaN" {
+      return TokenType::Number(f64::NAN);
+    }
+    TokenType::from(name)
   }
 }
 
