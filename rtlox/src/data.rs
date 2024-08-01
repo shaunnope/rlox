@@ -1,13 +1,19 @@
-// mod eq;
+use std::{
+  fmt::{self, Debug, Display},
+  rc::Rc,
+  sync::atomic::{self, AtomicUsize},
+};
 
-use std::fmt::{self, Debug, Display};
-use std::sync::atomic::{self, AtomicUsize};
-
-use crate::span::Span;
-use crate::token::{Token, TokenType};
+use crate::{
+  ast::stmt::FunDecl,
+  interpreter::{control_flow::ControlFlow, environment::Environment, CFResult, Interpreter},
+  span::Span,
+  token::{Token, TokenType},
+};
 
 #[derive(Clone)]
 pub enum LoxValue {
+  Function(Rc<dyn LoxCallable>),
   Boolean(bool),
   Number(f64),
   String(String),
@@ -24,6 +30,7 @@ impl LoxValue {
       Number(_) => "number",
       String(_) => "string",
       Nil => "nil",
+      Function(_) => "<func>",
       Unset => "<unset>",
     }
   }
@@ -33,7 +40,7 @@ impl LoxValue {
     use LoxValue::*;
     match self {
       Boolean(inner) => *inner,
-      Number(_) | String(_) => true,
+      Number(_) | String(_) | Function(_) => true,
       Nil => false,
       Unset => unreachable!("Invalid access of unset variable."),
     }
@@ -56,9 +63,11 @@ impl Display for LoxValue {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     use LoxValue::*;
     match self {
+      Function(fun) => Display::fmt(fun, f),
       Boolean(boolean) => Display::fmt(boolean, f),
       Number(number) => {
         if number.floor() == *number {
+          // express integers without decimal point
           write!(f, "{:.0}", number)
         } else {
           Display::fmt(number, f)
@@ -108,6 +117,16 @@ impl LoxIdent {
       span,
     }
   }
+
+  /// Creates a new lambda identifier
+  pub fn new_lambda(span: Span) -> Self {
+    let id = LoxIdentId::new();
+    LoxIdent {
+      id,
+      name: format!("<lambda {}>", id.0),
+      span,
+    }
+  }
 }
 
 impl From<Token> for LoxIdent {
@@ -137,5 +156,77 @@ impl From<LoxIdent> for String {
 impl Display for LoxIdent {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str(&self.name)
+  }
+}
+
+pub trait LoxCallable: Display + Debug {
+  fn call(self: Rc<Self>, interpreter: &mut Interpreter, args: &[LoxValue]) -> CFResult<LoxValue>;
+  fn arity(&self) -> usize;
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxFunction {
+  pub decl: Rc<FunDecl>,
+  pub closure: Environment,
+  pub is_class_init: bool,
+}
+
+impl LoxCallable for LoxFunction {
+  fn call(self: Rc<Self>, interpreter: &mut Interpreter, args: &[LoxValue]) -> CFResult<LoxValue> {
+    let mut env = Environment::new_enclosed(&self.closure);
+
+    for (param, value) in self.decl.params.iter().zip(args) {
+      env.define(param.clone(), value.clone());
+    }
+
+    let res = match interpreter.eval_block(&self.decl.body, env) {
+      Ok(()) => LoxValue::Nil,
+      Err(ControlFlow::Return(val)) => val,
+      Err(other) => return Err(other),
+    };
+
+    Ok(res)
+  }
+
+  fn arity(&self) -> usize {
+    self.decl.params.len()
+  }
+}
+
+impl Display for LoxFunction {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<fun {}>", self.decl.name)
+  }
+}
+
+pub struct NativeFunction {
+  pub name: &'static str,
+  pub fn_ptr: fn(args: &[LoxValue]) -> CFResult<LoxValue>,
+  pub arity: usize,
+}
+
+impl LoxCallable for NativeFunction {
+  fn call(self: Rc<Self>, _: &mut Interpreter, args: &[LoxValue]) -> CFResult<LoxValue> {
+    (self.fn_ptr)(args)
+  }
+
+  fn arity(&self) -> usize {
+    self.arity
+  }
+}
+
+impl Display for NativeFunction {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<fun (native) {}>", self.name)
+  }
+}
+
+impl Debug for NativeFunction {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("NativeFunction")
+      .field("name", &self.name)
+      .field("fn_ptr", &"fn_ptr")
+      .field("arity", &self.arity)
+      .finish()
   }
 }

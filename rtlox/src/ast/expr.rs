@@ -1,10 +1,16 @@
 use crate::{
+  ast::stmt::{FunDecl, Stmt},
   data::{LoxIdent, LoxValue},
   span::Span,
   token::{Token, TokenType},
 };
 
-make_ast_enum!(Expr, [Assignment, Var, Lit, Group, Unary, Binary, Logical]);
+use super::stmt;
+
+make_ast_enum!(
+  Expr,
+  [Assignment, Var, Lambda, Call, Lit, Group, Unary, Binary, Logical]
+);
 
 #[derive(Debug, Clone)]
 pub struct Assignment {
@@ -17,6 +23,19 @@ pub struct Assignment {
 pub struct Var {
   pub span: Span,
   pub name: LoxIdent,
+}
+
+#[derive(Debug, Clone)]
+pub struct Lambda {
+  pub span: Span,
+  pub decl: stmt::FunDecl,
+}
+
+#[derive(Debug, Clone)]
+pub struct Call {
+  pub span: Span,
+  pub callee: Box<Expr>,
+  pub args: Vec<Expr>,
 }
 
 #[derive(Debug, Clone)]

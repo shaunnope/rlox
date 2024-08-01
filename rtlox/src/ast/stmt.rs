@@ -1,12 +1,30 @@
 use crate::{ast::expr, data::LoxIdent, span::Span};
 
-make_ast_enum!(Stmt, [VarDecl, If, While, Print, Block, Expr, Dummy]);
+make_ast_enum!(
+  Stmt,
+  [VarDecl, FunDecl, If, While, Print, Return, Block, Expr, Dummy]
+);
 
 #[derive(Debug, Clone)]
 pub struct VarDecl {
   pub span: Span,
   pub name: LoxIdent,
   pub init: Option<expr::Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunDecl {
+  pub span: Span,
+  pub name: LoxIdent,
+  pub params: Vec<LoxIdent>,
+  pub body: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Return {
+  pub span: Span,
+  pub return_span: Span,
+  pub value: Option<expr::Expr>,
 }
 
 #[derive(Debug, Clone)]

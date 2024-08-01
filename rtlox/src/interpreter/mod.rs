@@ -5,7 +5,7 @@ use crate::{
     expr::{self, Expr},
     stmt::{self, Stmt},
   },
-  data::LoxValue,
+  data::{LoxFunction, LoxIdent, LoxValue},
   interpreter::{control_flow::ControlFlow, environment::Environment, error::RuntimeError},
   span::Span,
   token::{Token, TokenType},
@@ -15,19 +15,23 @@ pub mod control_flow;
 pub mod environment;
 pub mod error;
 
-// mod expr;
+mod native;
 
 #[derive(Debug)]
 pub struct Interpreter {
   // locals: HashMap<LoxIdentId, usize>,
-  // globals: Environment,
+  pub globals: Environment,
   env: Environment,
 }
 
 impl Interpreter {
   pub fn new() -> Self {
+    let mut globals = Environment::new();
+    native::attach(&mut globals);
+
     Self {
-      env: Environment::new(),
+      env: globals.clone(),
+      globals,
     }
   }
 
@@ -56,13 +60,15 @@ impl Interpreter {
     use Stmt::*;
     match &stmt {
       VarDecl(var) => self.eval_var_decl(var),
+      FunDecl(fun) => self.eval_fun_decl(fun),
       If(if_stmt) => self.eval_if_stmt(if_stmt),
       While(while_stmt) => self.eval_while_stmt(while_stmt),
       Print(print) => self.eval_print_stmt(print),
-      Block(block) => self.eval_block(block, Environment::new_enclosed(&self.env)),
+      Return(ret) => self.eval_return_stmt(ret),
+      Block(block) => self.eval_block(&block.stmts, Environment::new_enclosed(&self.env)),
       Expr(expr) => self.eval_expr(&expr.expr).map(drop),
       Dummy(_) => unreachable!(),
-      _ => Ok(()),
+      // _ => Ok(()),
     }
   }
 
@@ -74,6 +80,18 @@ impl Interpreter {
 
     self.env.define(var.name.clone(), value);
 
+    Ok(())
+  }
+
+  fn eval_fun_decl(&mut self, fun: &stmt::FunDecl) -> CFResult<()> {
+    self.env.define(
+      fun.name.clone(),
+      LoxValue::Function(Rc::new(LoxFunction {
+        decl: Rc::new(fun.clone()),
+        closure: self.env.clone(),
+        is_class_init: false,
+      })),
+    );
     Ok(())
   }
 
@@ -102,9 +120,18 @@ impl Interpreter {
     Ok(())
   }
 
-  fn eval_block(&mut self, block: &stmt::Block, new_env: Environment) -> CFResult<()> {
+  fn eval_return_stmt(&mut self, stmt: &stmt::Return) -> CFResult<()> {
+    let value = match &stmt.value {
+      Some(expr) => self.eval_expr(expr)?,
+      None => LoxValue::Nil,
+    };
+
+    Err(ControlFlow::Return(value))
+  }
+
+  pub(crate) fn eval_block(&mut self, block: &[Stmt], new_env: Environment) -> CFResult<()> {
     let old_env = mem::replace(&mut self.env, new_env);
-    let result = self.eval_stmts(&block.stmts);
+    let result = self.eval_stmts(&block);
     self.env = old_env;
     result
   }
@@ -113,17 +140,56 @@ impl Interpreter {
     use Expr::*;
     match &expr {
       Var(var) => self.eval_var_expr(var),
+      Call(call) => self.eval_call_expr(call),
       Lit(lit) => self.eval_lit_expr(lit),
       Group(group) => self.eval_group_expr(group),
       Unary(unary) => self.eval_unary_expr(unary),
       Binary(binary) => self.eval_binary_expr(binary),
       Logical(logical) => self.eval_logical_expr(logical),
-      Assignment(assign) => self.eval_assignemnt(assign),
+      Assignment(assign) => self.eval_assignment(assign),
+      Lambda(lambda) => self.eval_lambda(lambda),
     }
   }
 
   fn eval_var_expr(&mut self, var: &expr::Var) -> CFResult<LoxValue> {
     Ok(self.env.read(&var.name)?)
+  }
+
+  fn eval_call_expr(&mut self, call: &expr::Call) -> CFResult<LoxValue> {
+    use LoxValue::*;
+    let callee = self.eval_expr(&call.callee)?;
+
+    let args = call
+      .args
+      .iter()
+      .map(|expr| self.eval_expr(expr))
+      .collect::<Result<Vec<_>, _>>()?;
+
+    let callable = match callee {
+      Function(callable) => callable,
+      _ => {
+        return Err(ControlFlow::from(RuntimeError::UnsupportedType {
+          message: format!(
+            "Type `{}` is not callable. Can only call functions",
+            callee.type_name()
+          ),
+          span: call.span,
+        }))
+      }
+    };
+
+    if callable.arity() != args.len() {
+      return Err(ControlFlow::from(RuntimeError::UnsupportedType {
+        message: format!(
+          "Expected {} arguments, but got {}",
+          callable.arity(),
+          args.len()
+        ),
+        span: call.span,
+      }));
+    }
+
+    callable.call(self, &args)
   }
 
   fn eval_lit_expr(&mut self, lit: &expr::Lit) -> CFResult<LoxValue> {
@@ -215,15 +281,22 @@ impl Interpreter {
     match &logical.operator.kind {
       TokenType::And if !left.truth() => Ok(left),
       TokenType::Or if left.truth() => Ok(left),
-      _ => self.eval_expr(&logical.right)
+      _ => self.eval_expr(&logical.right),
     }
   }
 
-  fn eval_assignemnt(&mut self, assign: &expr::Assignment) -> CFResult<LoxValue> {
+  fn eval_assignment(&mut self, assign: &expr::Assignment) -> CFResult<LoxValue> {
     let value = self.eval_expr(&assign.value)?;
     self.env.assign(&assign.name, value.clone())?;
 
     Ok(value)
+  }
+
+  fn eval_lambda(&mut self, lambda: &expr::Lambda) -> CFResult<LoxValue> {
+    self.eval_fun_decl(&lambda.decl)?;
+
+    // return identifier to function
+    Ok(self.env.read(&lambda.decl.name)?)
   }
 }
 

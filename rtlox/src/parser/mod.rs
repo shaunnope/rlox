@@ -5,7 +5,7 @@ use crate::{
     expr::{self, Expr},
     stmt::{self, Stmt},
   },
-  data::{LoxIdent, LoxValue},
+  data::{LoxFunction, LoxIdent, LoxValue},
   parser::{error::ParseError, scanner::Scanner, state::ParserOptions},
   span::Span,
   token::{Token, TokenType},
@@ -49,6 +49,7 @@ impl Parser<'_> {
     use TokenType::*;
     let res = match self.current_token.kind {
       Var => self.parse_var_decl(),
+      Fun => self.parse_fun_decl(),
       _ => self.parse_stmt(),
     };
 
@@ -73,7 +74,7 @@ impl Parser<'_> {
     let init = self.take(Equal).then(|| self.parse_expr()).transpose()?;
 
     let semicolon_span = self
-      .consume(Semicolon, "Expected `;` after variable declaration.")?
+      .consume(Semicolon, "Expected `;` after variable declaration")?
       .span;
 
     Ok(Stmt::from(stmt::VarDecl {
@@ -81,6 +82,99 @@ impl Parser<'_> {
       name,
       init,
     }))
+  }
+
+  fn parse_fun_decl(&mut self) -> PResult<Stmt> {
+    use TokenType::*;
+    let fun_span = self.consume(Fun, S_MUST)?.span;
+
+    let fun = self.parse_fun_params("function", Some(fun_span))?;
+    if fun.name.name.starts_with("<lambda") {
+      return self.parse_lambda_decl(fun);
+    }
+    Ok(Stmt::from(fun))
+  }
+
+  fn parse_lambda_decl(&mut self, fun: stmt::FunDecl) -> PResult<Stmt> {
+    use TokenType::*;
+    let start = fun.span;
+    let mut expr = Expr::from(expr::Lambda {
+      span: start,
+      decl: fun,
+    });
+
+    if self.is(LeftParen) {
+      loop {
+        expr = match self.current_token.kind {
+          LeftParen => self.finish_call(expr)?,
+          _ => break,
+        }
+      }
+    };
+
+    let semicolon_span = self
+      .consume(Semicolon, "Expected `;` after lambda expression")?
+      .span;
+    
+    let span = start.to(semicolon_span);
+    return Ok(Stmt::from(stmt::Expr {
+      span,
+      expr,
+    }));
+  }
+
+  fn parse_fun_params(
+    &mut self,
+    kind: &'static str,
+    start: Option<Span>,
+  ) -> PResult<stmt::FunDecl> {
+    use TokenType::*;
+    let name = match (
+      kind,
+      start,
+      self.consume_ident(format!("Expected {kind} name")),
+    ) {
+      (_, _, Ok(ident)) => ident,
+      ("function", Some(span), _) => LoxIdent::new_lambda(span),
+      ("function", None, _) => unreachable!("Functions should have an associated span"),
+      (_, _, Err(err)) => Err(err)?,
+    };
+
+    let (params, param_span) = self.paired_spanned(
+      TokenType::LeftParen,
+      format!("Expected '(' after {} name", kind),
+      format!("Expected ')' after {} parameters", kind),
+      |this| {
+        let mut params = Vec::new();
+        if !this.is(RightParen) {
+          loop {
+            let param = this.consume_ident("Expected parameter name")?;
+            params.push(param);
+            if !this.take(Comma) {
+              break;
+            }
+          }
+        }
+
+        Ok(params)
+      },
+    )?;
+
+    if params.len() >= 255 {
+      self.diagnostics.push(ParseError::Error {
+        message: "Can't have more than 255 parameters".into(),
+        span: param_span,
+      })
+    }
+
+    let (body, body_span) = self.parse_block()?;
+
+    Ok(stmt::FunDecl {
+      span: start.unwrap_or(name.span).to(body_span),
+      name,
+      params,
+      body,
+    })
   }
 
   //
@@ -94,6 +188,7 @@ impl Parser<'_> {
       While => self.parse_while_stmt(),
       For => self.parse_for_stmt(),
       Print => self.parse_print_stmt(),
+      Return => self.parse_return_stmt(),
       LeftBrace => {
         let (stmts, span) = self.parse_block()?;
         Ok(Stmt::from(stmt::Block { span, stmts }))
@@ -104,7 +199,7 @@ impl Parser<'_> {
 
   fn parse_if_stmt(&mut self) -> PResult<Stmt> {
     let if_span = self.consume(TokenType::If, S_MUST)?.span;
-    let (cond, span) = self.paired_spanned(
+    let (cond, _span) = self.paired_spanned(
       TokenType::LeftParen,
       "Expected '(' after 'if'.",
       "Expected ')' after if condition.",
@@ -114,23 +209,23 @@ impl Parser<'_> {
     let then_branch = self.parse_stmt()?;
     let else_branch = match self.take(TokenType::Else) {
       true => Some(Box::new(self.parse_stmt()?)),
-      false => None
+      false => None,
     };
 
     Ok(Stmt::from(stmt::If {
       span: if_span.to(match &else_branch {
         Some(br) => br.span(),
-        None => then_branch.span()
+        None => then_branch.span(),
       }),
       cond,
       then_branch: then_branch.into(),
-      else_branch
+      else_branch,
     }))
   }
 
   fn parse_while_stmt(&mut self) -> PResult<Stmt> {
     let while_span = self.consume(TokenType::While, S_MUST)?.span;
-    let (cond, span) = self.paired_spanned(
+    let (cond, _span) = self.paired_spanned(
       TokenType::LeftParen,
       "Expected '(' after 'if'.",
       "Expected ')' after if condition.",
@@ -140,8 +235,8 @@ impl Parser<'_> {
     let body = self.parse_stmt()?;
     Ok(Stmt::from(stmt::While {
       span: while_span.to(body.span()),
-      cond, 
-      body: body.into()
+      cond,
+      body: body.into(),
     }))
   }
 
@@ -149,7 +244,7 @@ impl Parser<'_> {
   fn parse_for_stmt(&mut self) -> PResult<Stmt> {
     use TokenType::*;
     let for_span = self.consume(For, S_MUST)?.span;
-    
+
     let (init, cond, incr) = self.paired(
       LeftParen,
       "Expected `(` after `for`",
@@ -161,7 +256,7 @@ impl Parser<'_> {
             None
           }
           Var => Some(this.parse_var_decl()?),
-          _ => Some(this.parse_expr_stmt()?)
+          _ => Some(this.parse_expr_stmt()?),
         };
 
         let cond = match this.current_token.kind {
@@ -170,20 +265,20 @@ impl Parser<'_> {
             let lo = this.current_token.span.0;
             Expr::from(expr::Lit {
               span: Span::new(lo, lo),
-              value: LoxValue::Boolean(true)
+              value: LoxValue::Boolean(true),
             })
-          },
-          _ => this.parse_expr()?
+          }
+          _ => this.parse_expr()?,
         };
         this.consume(Semicolon, "Expected `;` after `for` condition")?;
 
         let incr = match this.current_token.kind {
           RightParen => None,
-          _ => Some(this.parse_expr()?)
+          _ => Some(this.parse_expr()?),
         };
-        
+
         Ok((init, cond, incr))
-      }
+      },
     )?;
 
     let mut body = self.parse_stmt()?;
@@ -192,10 +287,13 @@ impl Parser<'_> {
     if let Some(incr) = incr {
       body = Stmt::from(stmt::Block {
         span: body.span(),
-        stmts: vec![body, Stmt::from(stmt::Expr {
-          span: incr.span(),
-          expr: incr,
-        })]
+        stmts: vec![
+          body,
+          Stmt::from(stmt::Expr {
+            span: incr.span(),
+            expr: incr,
+          }),
+        ],
       })
     }
 
@@ -203,16 +301,16 @@ impl Parser<'_> {
     body = Stmt::from(stmt::While {
       span: for_span.to(body.span()),
       cond,
-      body: body.into()
+      body: body.into(),
     });
 
     // initializer
     if let Some(init) = init {
       body = Stmt::from(stmt::Block {
         span: body.span(),
-        stmts: vec![init, body]
+        stmts: vec![init, body],
       })
-    }    
+    }
 
     Ok(body)
   }
@@ -228,6 +326,23 @@ impl Parser<'_> {
       span: print_token_span.to(semicolon_span),
       expr,
       debug: false,
+    }))
+  }
+
+  fn parse_return_stmt(&mut self) -> PResult<Stmt> {
+    use TokenType::*;
+    let return_span = self.consume(Return, S_MUST)?.span;
+
+    let value = (!self.is(Semicolon))
+      .then(|| self.parse_expr())
+      .transpose()?;
+
+    let semicolon_span = self.consume(Semicolon, "Expected `;` after return")?.span;
+
+    Ok(Stmt::from(stmt::Return {
+      span: return_span.to(semicolon_span),
+      return_span,
+      value,
     }))
   }
 
@@ -273,11 +388,29 @@ impl Parser<'_> {
   //
 
   fn parse_expr(&mut self) -> PResult<Expr> {
-    self.parse_assignment()
+    self.parse_sequence()
+  }
+
+  fn parse_sequence(&mut self) -> PResult<Expr> {
+    let mut expr = self.parse_assignment()?;
+    loop {
+      if self.take(TokenType::Comma) {
+        let operator = self.prev_token.clone();
+        let right = self.parse_expr()?;
+        expr = Expr::from(expr::Binary {
+          span: operator.span,
+          left: expr.into(),
+          operator,
+          right: right.into(),
+        })
+      } else {
+        break Ok(expr);
+      }
+    }
   }
 
   fn parse_assignment(&mut self) -> PResult<Expr> {
-    let left = self.parse_sequence()?;
+    let left = self.parse_or()?;
 
     // expression above is an l-value
     if self.take(TokenType::Equal) {
@@ -301,24 +434,6 @@ impl Parser<'_> {
     Ok(left)
   }
 
-  fn parse_sequence(&mut self) -> PResult<Expr> {
-    let mut expr = self.parse_or()?;
-    loop {
-      if self.take(TokenType::Comma) {
-        let operator = self.prev_token.clone();
-        let right = self.parse_expr()?;
-        expr = Expr::from(expr::Binary {
-          span: operator.span,
-          left: expr.into(),
-          operator,
-          right: right.into(),
-        })
-      } else {
-        break Ok(expr);
-      }
-    }
-  }
-  
   fn parse_or(&mut self) -> PResult<Expr> {
     bin_expr!(
       self,
@@ -384,6 +499,74 @@ impl Parser<'_> {
         operand: operand.into(),
       }));
     }
+    self.parse_call()
+  }
+
+  fn parse_call(&mut self) -> PResult<Expr> {
+    use TokenType::*;
+    let mut expr = self.parse_lambda()?;
+    loop {
+      expr = match self.current_token.kind {
+        LeftParen => self.finish_call(expr)?,
+        _ => break,
+      }
+    }
+
+    Ok(expr)
+  }
+
+  fn finish_call(&mut self, callee: Expr) -> PResult<Expr> {
+    use TokenType::*;
+    let (args, call_span) =
+      self.paired_spanned(LeftParen, S_MUST, "Expected `)` after arguments", |this| {
+        let mut args = Vec::new();
+        if !this.is(RightParen) {
+          loop {
+            args.push(this.parse_assignment()?);
+            if !this.take(Comma) {
+              break;
+            }
+          }
+        }
+        Ok(args)
+      })?;
+
+    if args.len() >= 255 {
+      // Error isn't thrown because parser is not in a confused state
+      self.diagnostics.push(ParseError::Error {
+        message: "Call can't have more than 255 arguments".into(),
+        span: call_span,
+      })
+    }
+
+    Ok(Expr::from(expr::Call {
+      span: callee.span().to(call_span),
+      callee: callee.into(),
+      args,
+    }))
+  }
+
+  fn parse_lambda(&mut self) -> PResult<Expr> {
+    use TokenType::*;
+    if self.is(TokenType::Fun) {
+      let fun_span = self.consume(Fun, S_MUST)?.span;
+      let fun = self.parse_fun_params("function", Some(fun_span))?;
+      if !fun.name.name.starts_with("<lambda") {
+        return Err(ParseError::Error {
+          message: format!(
+            "Named function {} cannot be used as an expression",
+            fun.name
+          ),
+          span: fun.span,
+        });
+      }
+
+      return Ok(Expr::from(expr::Lambda {
+        span: fun.span,
+        decl: fun,
+      }));
+    }
+
     self.parse_primary()
   }
 

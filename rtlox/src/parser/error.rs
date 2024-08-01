@@ -26,6 +26,8 @@ pub enum ParseError {
     offending: Token,
     expected: Option<TokenType>,
   },
+
+  DetectedLambda,
 }
 
 impl Display for ParseError {
@@ -53,6 +55,8 @@ impl Display for ParseError {
         // }
         Ok(())
       }
+
+      DetectedLambda => unreachable!(),
     }
   }
 }
@@ -66,6 +70,7 @@ impl ParseError {
     match self {
       Error { span, .. } | ScanError { span, .. } => *span,
       UnexpectedToken { offending, .. } => offending.span,
+      DetectedLambda => unreachable!(),
     }
   }
 
@@ -75,6 +80,7 @@ impl ParseError {
     match self {
       UnexpectedToken { offending, .. } if offending.kind == TokenType::EOF => true,
       ScanError { error, .. } if error.allows_continuation() => true,
+      DetectedLambda => unreachable!(),
       _ => false,
     }
   }
