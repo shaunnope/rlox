@@ -7,8 +7,6 @@ pub mod parser;
 pub mod resolver;
 pub mod token;
 
-mod error; // custom error type
-
 pub mod data;
 pub mod span;
 pub mod user;

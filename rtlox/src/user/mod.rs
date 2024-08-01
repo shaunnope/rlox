@@ -3,13 +3,11 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::str;
 
-// use crate::interpreter::environment::Environment;
 use crate::{
   interpreter::Interpreter,
   parser::{Parser, ParserOutcome},
-  resolver::Resolver,
+  resolver::{Resolver, error::ErrorType},
 };
-// use error::Error;
 
 fn handle_parser_outcome(
   // src: &str,
@@ -28,10 +26,14 @@ fn handle_parser_outcome(
   let resolver = Resolver::new(interpreter);
   let (ok, errors) = resolver.resolve(stmts);
   if !ok {
+    let mut has_errors = false;
     for error in errors {
       eprintln!("{}; at position {}", error.message, error.span);
+      if let ErrorType::Error = error.kind {
+        has_errors = true;
+      };
     }
-    return false;
+    if has_errors { return false;}
   }
 
   // interpreter

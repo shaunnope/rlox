@@ -1,6 +1,5 @@
 use std::{
-  collections::{hash_map::Entry, HashMap},
-  mem,
+  collections::{hash_map::Entry, HashMap}, mem
 };
 
 use crate::{
@@ -10,8 +9,11 @@ use crate::{
   },
   data::LoxIdent,
   interpreter::Interpreter,
+  resolver::error::{ErrorType, ResolveError},
   span::Span,
 };
+
+pub mod error;
 
 #[derive(Debug)]
 pub struct Resolver<'i> {
@@ -51,7 +53,7 @@ impl Resolver<'_> {
       }
       Return(stmt) => {
         if self.state.function == FunctionState::None {
-          self.error(stmt.return_span, "Illegal return statement");
+          self.error(ErrorType::Error, stmt.return_span, "Illegal return statement");
         }
         if let Some(val) = &stmt.value {
           self.resolve_expr(val);
@@ -80,8 +82,9 @@ impl Resolver<'_> {
     match &expr {
       Lit(_) => {}
       Var(var) => {
-        if self.query(&var.name, BindingState::Declared) {
+        if self.query(&var.name, BindingState::Declared(var.span)) {
           self.error(
+            ErrorType::Error,
             var.name.span,
             format!(
               "Cannot read local variable `{}` in its own initializer",
@@ -140,10 +143,11 @@ impl<'i> Resolver<'i> {
 
     match scope.entry(ident.name.clone()) {
       Entry::Vacant(entry) => {
-        entry.insert(BindingState::Declared);
+        entry.insert(BindingState::Declared(ident.span));
       }
       Entry::Occupied(_) => {
         self.error(
+          ErrorType::Error,
           ident.span,
           format!("Cannot shadow `{}` in the same scope", ident.name),
         );
@@ -160,11 +164,10 @@ impl<'i> Resolver<'i> {
     };
 
     match scope.get_mut(&ident.name) {
-      Some(binding) => {
-        *binding = BindingState::Initialized;
-      }
+      Some(binding) => *binding = BindingState::Initialized(ident.span),
       None => {
         self.error(
+          ErrorType::Error,
           ident.span,
           format!("Binding `{}` is not defined", ident.name),
         );
@@ -172,13 +175,33 @@ impl<'i> Resolver<'i> {
     };
   }
 
-  fn _initialize(&mut self, ident: impl Into<String>) {
-    self
-      .scopes
-      .last_mut()
-      .unwrap()
-      .insert(ident.into(), BindingState::Initialized);
+  fn access(&mut self, ident: &LoxIdent) {
+    if self.scopes.is_empty() {
+      return;
+    }
+    let Some(scope) = self.scopes.last_mut() else {
+      unreachable!();
+    };
+
+    match scope.get_mut(&ident.name) {
+      Some(binding) => *binding = BindingState::Accessed,
+      None => {
+        self.error(
+          ErrorType::Error,
+          ident.span,
+          format!("Binding `{}` is not defined", ident.name),
+        );
+      }
+    };
   }
+
+  // fn _initialize(&mut self, ident: impl Into<String>) {
+  //   self
+  //     .scopes
+  //     .last_mut()
+  //     .unwrap()
+  //     .insert(ident.into(), BindingState::Initialized);
+  // }
 
   fn query(&mut self, ident: &LoxIdent, expected: BindingState) -> bool {
     self.scopes.last().and_then(|scope| scope.get(&ident.name)) == Some(&expected)
@@ -224,26 +247,53 @@ impl<'i> Resolver<'i> {
   {
     self.begin_scope();
     let res = inner(self);
+    self.check_unused();
     self.end_scope();
     res
   }
 
-  fn error(&mut self, span: Span, message: impl Into<String>) {
+  /// Reports any unused local variables
+  fn check_unused(&mut self) {
+    use BindingState::*;
+    if let Some(scope) = self.scopes.last() {
+      for (key, state) in scope.iter() {
+        match state {
+          Declared(span) | Initialized (span) => {
+            self.errors.push(ResolveError {
+              kind: ErrorType::Warning,
+              message: format!("Unused variable `{}`", key),
+              span: *span,
+            })
+          }
+          _ => continue
+        }
+      }
+    }
+  }
+
+  fn error(&mut self, kind: ErrorType, span: Span, message: impl Into<String>) {
     let message = message.into();
-    self.errors.push(ResolveError { span, message });
+    self.errors.push(ResolveError { span, message, kind });
   }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Eq)]
 enum BindingState {
-  Declared,
-  Initialized,
+  Declared(Span),
+  Initialized(Span),
+  Accessed,
 }
 
-#[derive(Debug)]
-pub struct ResolveError {
-  pub message: String,
-  pub span: Span,
+impl PartialEq for BindingState {
+  fn eq(&self, other: &Self) -> bool {
+    use BindingState::*;
+    match (self, other) {
+      (Declared(_), Declared(_)) => true,
+      (Initialized(_), Initialized(_)) => true,
+      (Accessed, Accessed) => true,
+      _ => false
+    }
+  }
 }
 
 #[derive(Debug, Default)]

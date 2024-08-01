@@ -1,5 +1,8 @@
-var a = "outer";
+var d = 1;
 {
-  print a;
-  var a = "inner";
+  var a = "unused";
+  var b;
+  var c = "used";
+  print c;
+  // var d = d + 1;
 }
