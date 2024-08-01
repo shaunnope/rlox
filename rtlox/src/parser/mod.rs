@@ -5,7 +5,7 @@ use crate::{
     expr::{self, Expr},
     stmt::{self, Stmt},
   },
-  data::{LoxFunction, LoxIdent, LoxValue},
+  data::{LoxIdent, LoxValue},
   parser::{error::ParseError, scanner::Scanner, state::ParserOptions},
   span::Span,
   token::{Token, TokenType},
@@ -115,12 +115,9 @@ impl Parser<'_> {
     let semicolon_span = self
       .consume(Semicolon, "Expected `;` after lambda expression")?
       .span;
-    
+
     let span = start.to(semicolon_span);
-    return Ok(Stmt::from(stmt::Expr {
-      span,
-      expr,
-    }));
+    return Ok(Stmt::from(stmt::Expr { span, expr }));
   }
 
   fn parse_fun_params(

@@ -1,13 +1,5 @@
-fun makeCounter() {
-  var i = 0;
-  fun count() {
-    i = i + 1;
-    print i;
-  }
-
-  return count;
+var a = "outer";
+{
+  print a;
+  var a = "inner";
 }
-
-var counter = makeCounter();
-counter(); // "1".
-counter(); // "2".

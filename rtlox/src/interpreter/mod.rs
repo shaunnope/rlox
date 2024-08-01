@@ -5,10 +5,10 @@ use crate::{
     expr::{self, Expr},
     stmt::{self, Stmt},
   },
-  data::{LoxFunction, LoxIdent, LoxValue},
+  data::{LoxFunction, LoxIdent, LoxIdentId, LoxValue},
   interpreter::{control_flow::ControlFlow, environment::Environment, error::RuntimeError},
-  span::Span,
-  token::{Token, TokenType},
+  // span::Span,
+  token::TokenType,
 };
 
 pub mod control_flow;
@@ -19,22 +19,12 @@ mod native;
 
 #[derive(Debug)]
 pub struct Interpreter {
-  // locals: HashMap<LoxIdentId, usize>,
+  locals: HashMap<LoxIdentId, usize>,
   pub globals: Environment,
   env: Environment,
 }
 
 impl Interpreter {
-  pub fn new() -> Self {
-    let mut globals = Environment::new();
-    native::attach(&mut globals);
-
-    Self {
-      env: globals.clone(),
-      globals,
-    }
-  }
-
   // Note that `CFResult` must not be exposed to the interpreter caller.
   // It is an implementation detail.
   pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -152,7 +142,7 @@ impl Interpreter {
   }
 
   fn eval_var_expr(&mut self, var: &expr::Var) -> CFResult<LoxValue> {
-    Ok(self.env.read(&var.name)?)
+    Ok(self.lookup_variable(&var.name)?)
   }
 
   fn eval_call_expr(&mut self, call: &expr::Call) -> CFResult<LoxValue> {
@@ -287,9 +277,12 @@ impl Interpreter {
 
   fn eval_assignment(&mut self, assign: &expr::Assignment) -> CFResult<LoxValue> {
     let value = self.eval_expr(&assign.value)?;
-    self.env.assign(&assign.name, value.clone())?;
 
-    Ok(value)
+    if let Some(dist) = self.locals.get(&assign.name.id) {
+      Ok(self.env.assign_at(*dist, &assign.name, value))
+    } else {
+      Ok(self.globals.assign(&assign.name, value)?)
+    }
   }
 
   fn eval_lambda(&mut self, lambda: &expr::Lambda) -> CFResult<LoxValue> {
@@ -297,6 +290,31 @@ impl Interpreter {
 
     // return identifier to function
     Ok(self.env.read(&lambda.decl.name)?)
+  }
+}
+
+impl Interpreter {
+  pub fn new() -> Self {
+    let mut globals = Environment::new();
+    native::attach(&mut globals);
+
+    Self {
+      env: globals.clone(),
+      globals,
+      locals: HashMap::new(),
+    }
+  }
+
+  pub fn resolve_local(&mut self, ident: &LoxIdent, depth: usize) {
+    self.locals.insert(ident.id, depth);
+  }
+
+  fn lookup_variable(&self, ident: &LoxIdent) -> CFResult<LoxValue> {
+    if let Some(distance) = self.locals.get(&ident.id) {
+      Ok(self.env.read_at(*distance, ident))
+    } else {
+      Ok(self.globals.read(ident)?)
+    }
   }
 }
 

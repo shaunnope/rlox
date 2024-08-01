@@ -4,9 +4,11 @@ use std::path::Path;
 use std::str;
 
 // use crate::interpreter::environment::Environment;
-use crate::interpreter::{self, Interpreter};
-use crate::parser::{Parser, ParserOutcome};
-
+use crate::{
+  interpreter::Interpreter,
+  parser::{Parser, ParserOutcome},
+  resolver::Resolver,
+};
 // use error::Error;
 
 fn handle_parser_outcome(
@@ -18,6 +20,16 @@ fn handle_parser_outcome(
   if !errors.is_empty() {
     for error in errors {
       eprintln!("{}", error);
+    }
+    return false;
+  }
+
+  // resolver errors
+  let resolver = Resolver::new(interpreter);
+  let (ok, errors) = resolver.resolve(stmts);
+  if !ok {
+    for error in errors {
+      eprintln!("{}; at position {}", error.message, error.span);
     }
     return false;
   }

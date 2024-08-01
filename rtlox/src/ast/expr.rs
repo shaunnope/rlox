@@ -1,5 +1,4 @@
 use crate::{
-  ast::stmt::{FunDecl, Stmt},
   data::{LoxIdent, LoxValue},
   span::Span,
   token::{Token, TokenType},

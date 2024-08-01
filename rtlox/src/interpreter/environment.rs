@@ -61,6 +61,19 @@ impl Environment {
     }
   }
 
+  /// Assigns to a variable in a distant scope.
+  pub fn assign_at(&mut self, dist: usize, ident: &LoxIdent, value: LoxValue) -> LoxValue {
+    // This should never panic due to the semantic verifications that the resolver performs.
+    *self
+      .ancestor(dist)
+      .inner
+      .borrow_mut()
+      .locals
+      .get_mut(&ident.name)
+      .unwrap() = value.clone();
+    value
+  }
+
   /// Reads a variable.
   pub fn read(&self, ident: &LoxIdent) -> Result<LoxValue, RuntimeError> {
     let inner = self.inner.borrow();
@@ -76,5 +89,26 @@ impl Environment {
         }),
       },
     }
+  }
+
+  /// Reads a variable in a distant scope.
+  pub fn read_at(&self, dist: usize, ident: impl AsRef<str>) -> LoxValue {
+    self
+      .ancestor(dist)
+      .inner
+      .borrow()
+      .locals
+      .get(ident.as_ref())
+      .unwrap()
+      .clone()
+  }
+
+  fn ancestor(&self, dist: usize) -> Environment {
+    let mut curr = self.clone();
+    for _ in 0..dist {
+      let maybe_enclosing = curr.inner.borrow().enclosing.clone();
+      curr = maybe_enclosing.unwrap();
+    }
+    curr
   }
 }

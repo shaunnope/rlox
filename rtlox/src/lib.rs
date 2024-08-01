@@ -4,6 +4,7 @@ mod tests;
 pub mod ast;
 pub mod interpreter;
 pub mod parser;
+pub mod resolver;
 pub mod token;
 
 mod error; // custom error type
@@ -30,7 +31,10 @@ pub fn parse_args(mut args: impl Iterator<Item = String>) -> Result<(), &'static
     return Err("Usage rlox [script]");
   }
 
-  let _ = user::run_file(&file_path);
+  if let Err(err) = user::run_file(&file_path) {
+    eprintln!("{}", err);
+    return Err("Could not run file")
+  };
 
   Ok(())
 }

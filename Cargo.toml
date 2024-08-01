@@ -1,3 +1,4 @@
 [workspace]
 
 members = ["rtlox"]
+resolver = "2"
