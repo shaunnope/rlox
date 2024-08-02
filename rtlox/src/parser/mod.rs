@@ -468,7 +468,7 @@ impl Parser<'_> {
         },
         _ => {
           Err(ParseError::Error {
-            message: "Invalid assignment target.".into(),
+            message: "Invalid assignment target ".into(),
             span: left.span(),
           })
         }

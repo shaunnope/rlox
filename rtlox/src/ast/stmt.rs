@@ -1,4 +1,6 @@
-use crate::{ast::expr, data::LoxIdent, span::Span};
+use std::fmt::Display;
+
+use crate::{ast::expr, data::LoxIdent, disp::{display_option, display_vec}, span::Span};
 
 make_ast_enum!(
   Stmt,
@@ -73,4 +75,20 @@ pub struct Expr {
 #[derive(Debug, Clone)]
 pub struct Dummy {
   pub span: Span,
+}
+
+impl Display for Stmt {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use Stmt::*;
+    match self {
+      Block(block) => write!(f, "Block ( {} )", display_vec(&block.stmts)),
+      ClassDecl(class) => write!(f, "Class ( {} {{ \n {:?}\n }}", class.name, class.methods),
+      FunDecl(fun) => write!(f, "Fun( {} <{}>  {{ \n {}\n }} )", fun.name, display_vec(&fun.params), display_vec(&fun.body)),
+      Return(ret) => write!(f, "Return( {} )", display_option(&ret.value)),
+
+      If(if_stmt) => write!(f, "If( {} ? {} : {} )", if_stmt.cond, if_stmt.then_branch, display_option(&if_stmt.else_branch)),
+      Print(print) => write!(f, "Print( {} )", print.expr),
+      other => write!(f, "{:#?}", other)
+    }
+  }
 }

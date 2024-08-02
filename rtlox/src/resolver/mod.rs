@@ -151,7 +151,9 @@ impl Resolver<'_> {
       }
       Call(call) => {
         self.resolve_expr(&call.callee);
-        let _ = call.args.iter().map(|arg| self.resolve_expr(&arg));
+        for arg in &call.args {
+          self.resolve_expr(arg);
+        }
       },
       Get(get) => {
         self.resolve_expr(&get.obj);

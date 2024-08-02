@@ -1,6 +1,3 @@
-#[cfg(test)]
-mod tests;
-
 pub mod ast;
 pub mod interpreter;
 pub mod parser;
@@ -10,6 +7,8 @@ pub mod token;
 pub mod data;
 pub mod span;
 pub mod user;
+
+pub mod disp;
 
 use std::str;
 

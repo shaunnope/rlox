@@ -5,7 +5,7 @@ use std::str;
 
 use crate::{
   interpreter::Interpreter,
-  parser::{Parser, ParserOutcome},
+  parser::{Parser, ParserOutcome, state::ParserOptions},
   resolver::{Resolver, error::ErrorType},
 };
 
@@ -49,13 +49,16 @@ pub fn run_file(file: impl AsRef<Path>) -> io::Result<bool> {
   let src = &fs::read_to_string(file)?;
   let mut interpreter = Interpreter::new();
 
-  Ok(run(src, &mut interpreter, false))
+  Ok(run(src, &mut interpreter, ParserOptions {
+    repl_mode: false,
+    display_ast: true,
+  }))
 }
 
-/// Processe Lox source code
-fn run(src: &str, interpreter: &mut Interpreter, is_repl: bool) -> bool {
+/// Process Lox source code
+fn run(src: &str, interpreter: &mut Interpreter, options: ParserOptions) -> bool {
   let mut parser = Parser::new(src);
-  parser.options.repl_mode = is_repl;
+  parser.options = options;
 
   let outcome = parser.parse();
 
@@ -67,6 +70,11 @@ pub fn run_repl() {
   println!("Entering interactive mode...");
   let mut interpreter = Interpreter::new();
 
+  let options = ParserOptions {
+    repl_mode: true,
+    display_ast: false,
+  };
+
   loop {
     let mut line = String::new();
     print!("> ");
@@ -76,7 +84,7 @@ pub fn run_repl() {
       .read_line(&mut line)
       .expect("Failed to read line");
 
-    if !run(&line, &mut interpreter, true) {
+    if !run(&line, &mut interpreter, options.clone()) {
       continue;
     };
   }

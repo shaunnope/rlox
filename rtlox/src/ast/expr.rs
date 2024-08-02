@@ -1,10 +1,12 @@
+use std::fmt;
+
 use crate::{
+  ast::stmt,
   data::{LoxIdent, LoxValue},
+  disp::display_vec,
   span::Span,
   token::{Token, TokenType},
 };
-
-use super::stmt;
 
 make_ast_enum!(
   Expr,
@@ -121,6 +123,32 @@ impl From<Token> for Lit {
           unexpected
         ),
       },
+    }
+  }
+}
+
+impl fmt::Display for Expr {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Var(var) => write!(f, "{}", var.name),
+      Self::Lit(token) => write!(f, "{}", token.value),
+      Self::Group(node) => write!(f, "(group {})", node.expr),
+      Self::Binary(bin) => {
+        return write!(f, "({} {} {})", bin.operator, bin.left, bin.right)
+      },
+      Self::Logical(logical) => {
+        return write!(f, "({} {} {})", logical.operator, logical.left, logical.right)
+      },
+      Self::Unary(unary) => {
+        return write!(f, "({} {})", unary.operator, unary.operand)
+      },
+      Self::Assignment(assign) => write!(f, "(= {} {})", assign.name, assign.value),
+      Self::Call(call) => write!(f, "(call {} {})", call.callee, display_vec(&call.args)),
+      Self::Get(get) => write!(f, "(get {} {:?})", get.name, get.obj),
+      Self::Set(set) => write!(f, "(set {} {} {:?})", set.name, set.value, set.obj),
+      Self::Lambda(lambda) => write!(f, "(L {} {:?} {:?})", lambda.decl.name, lambda.decl.params, lambda.decl.body),
+      Self::This(this) => write!(f, "(this {})", this.name),
+      Self::Super(class) => write!(f, "(super {} {})", class.super_ident, class.method),
     }
   }
 }

@@ -419,7 +419,7 @@ impl Interpreter {
       Ok(instance)
     } else {
       Err(RuntimeError::UnsupportedType {
-        message: "Only objects (instances of some class) have properties".into(),
+        message: "Only objects can have properties".into(),
         span: error_span,
       }
       .into())
