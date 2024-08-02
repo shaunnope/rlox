@@ -8,7 +8,7 @@ use super::stmt;
 
 make_ast_enum!(
   Expr,
-  [Assignment, Var, Lambda, Call, Lit, Group, Unary, Binary, Logical]
+  [Assignment, Var, Lambda, Call, Get, Set, This, Lit, Group, Unary, Binary, Logical]
 );
 
 #[derive(Debug, Clone)]
@@ -35,6 +35,27 @@ pub struct Call {
   pub span: Span,
   pub callee: Box<Expr>,
   pub args: Vec<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Get {
+  pub span: Span,
+  pub obj: Box<Expr>, 
+  pub name: LoxIdent,
+}
+
+#[derive(Debug, Clone)]
+pub struct Set {
+  pub span: Span,
+  pub obj: Box<Expr>, 
+  pub name: LoxIdent,
+  pub value: Box<Expr>
+}
+
+#[derive(Debug, Clone)]
+pub struct This {
+  pub span: Span,
+  pub name: LoxIdent,
 }
 
 #[derive(Debug, Clone)]

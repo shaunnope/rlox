@@ -5,9 +5,9 @@ use crate::{
     expr::{self, Expr},
     stmt::{self, Stmt},
   },
-  data::{LoxFunction, LoxIdent, LoxIdentId, LoxValue},
+  data::{LoxClass, LoxFunction, LoxIdent, LoxIdentId, LoxValue, LoxInstance},
   interpreter::{control_flow::ControlFlow, environment::Environment, error::RuntimeError},
-  // span::Span,
+  span::Span,
   token::TokenType,
 };
 
@@ -51,6 +51,7 @@ impl Interpreter {
     match &stmt {
       VarDecl(var) => self.eval_var_decl(var),
       FunDecl(fun) => self.eval_fun_decl(fun),
+      ClassDecl(class) => self.eval_class_decl(class),
       If(if_stmt) => self.eval_if_stmt(if_stmt),
       While(while_stmt) => self.eval_while_stmt(while_stmt),
       Print(print) => self.eval_print_stmt(print),
@@ -84,6 +85,33 @@ impl Interpreter {
     );
     Ok(())
   }
+
+  fn eval_class_decl(&mut self, decl: &stmt::ClassDecl) -> CFResult<()> {
+    self.env.define(decl.name.clone(), LoxValue::Nil);
+
+    let methods = decl.methods.iter().cloned()
+      .map(|decl| {
+        (
+          decl.name.name.clone(),
+          Rc::new(LoxFunction {
+            is_class_init: decl.name.name == "init",
+            decl: Rc::new(decl),
+            closure: self.env.clone()
+          })
+        )
+      }).collect();
+
+    self.env.assign(
+      &decl.name,
+      LoxValue::Class(Rc::new(LoxClass {
+          name: decl.name.clone(),
+          methods,
+      })),
+    )?;
+
+    Ok(())
+  }
+
 
   fn eval_if_stmt(&mut self, stmt: &stmt::If) -> CFResult<()> {
     if self.eval_expr(&stmt.cond)?.truth() {
@@ -131,6 +159,9 @@ impl Interpreter {
     match &expr {
       Var(var) => self.eval_var_expr(var),
       Call(call) => self.eval_call_expr(call),
+      Get(get) => self.eval_get_expr(get),
+      Set(set) => self.eval_set_expr(set),
+      This(this) => self.lookup_variable(&this.name),
       Lit(lit) => self.eval_lit_expr(lit),
       Group(group) => self.eval_group_expr(group),
       Unary(unary) => self.eval_unary_expr(unary),
@@ -157,6 +188,7 @@ impl Interpreter {
 
     let callable = match callee {
       Function(callable) => callable,
+      Class(class) => class,
       _ => {
         return Err(ControlFlow::from(RuntimeError::UnsupportedType {
           message: format!(
@@ -180,6 +212,20 @@ impl Interpreter {
     }
 
     callable.call(self, &args)
+  }
+
+  fn eval_get_expr(&mut self, get: &expr::Get) -> CFResult<LoxValue> {
+    let maybe_obj = self.eval_expr(&get.obj)?;
+    let obj  = Self::ensure_object(maybe_obj, get.name.span)?;
+    Ok(obj.get(&get.name)?)
+  }
+
+  fn eval_set_expr(&mut self, set: &expr::Set) -> CFResult<LoxValue> {
+    let maybe_obj = self.eval_expr(&set.obj)?;
+    let obj  = Self::ensure_object(maybe_obj, set.name.span)?;
+    let value = self.eval_expr(&set.value)?;
+    obj.set(&set.name, value.clone());
+    Ok(value)
   }
 
   fn eval_lit_expr(&mut self, lit: &expr::Lit) -> CFResult<LoxValue> {
@@ -316,6 +362,18 @@ impl Interpreter {
       Ok(self.globals.read(ident)?)
     }
   }
+
+  fn ensure_object(value: LoxValue, error_span: Span) -> CFResult<Rc<LoxInstance>> {
+    if let LoxValue::Object(instance) = value {
+      Ok(instance)
+    } else {
+      Err(RuntimeError::UnsupportedType {
+        message: "Only objects (instances of some class) have properties".into(),
+        span: error_span,
+      }
+      .into())
+    }
+}
 }
 
 /// Control flow result

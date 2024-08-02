@@ -4,8 +4,8 @@ use std::{
 
 use crate::{
   ast::{
-    expr::Expr,
-    stmt::{self, Stmt},
+    expr::{self, Expr},
+    stmt::{self, ClassDecl, Stmt},
   },
   data::LoxIdent,
   interpreter::Interpreter,
@@ -51,10 +51,22 @@ impl Resolver<'_> {
 
         self.resolve_fun(fun, FunctionState::Function);
       }
+      ClassDecl(class) => self.resolve_class(class),
       Return(stmt) => {
-        if self.state.function == FunctionState::None {
-          self.error(ErrorType::Error, stmt.return_span, "Illegal return statement");
+        match (self.state.function, &stmt.value) {
+          (FunctionState::None, _) => {
+            self.error(ErrorType::Error, stmt.return_span, "Illegal return statement");
+          }
+          (FunctionState::Init, Some(expr::Expr::This(_))) => {},
+          (FunctionState::Init, Some(_)) => {
+            self.error(
+              ErrorType::Warning, stmt.return_span, 
+              "Initializer returns a value that is not `this`"
+            );
+          }
+          _ => {}
         }
+
         if let Some(val) = &stmt.value {
           self.resolve_expr(val);
         }
@@ -77,6 +89,27 @@ impl Resolver<'_> {
     };
   }
 
+  fn resolve_class(&mut self, class: &stmt::ClassDecl) {
+    let old_class_state = mem::replace(&mut self.state.class, ClassState::Class);
+
+    self.declare(&class.name);
+    self.define(&class.name);
+
+    self.scoped(|this| {
+      this.initialize("this", class.span);
+      for method in &class.methods {
+        let state = if method.name.name == "init" {
+          FunctionState::Init
+        } else {
+          FunctionState::Method
+        };
+        this.resolve_fun(&method, state);
+      }
+    });
+
+    self.state.class = old_class_state;
+  }
+
   fn resolve_expr(&mut self, expr: &Expr) {
     use Expr::*;
     match &expr {
@@ -97,19 +130,36 @@ impl Resolver<'_> {
       Call(call) => {
         self.resolve_expr(&call.callee);
         let _ = call.args.iter().map(|arg| self.resolve_expr(&arg));
-      }
+      },
+      Get(get) => {
+        self.resolve_expr(&get.obj);
+      },
+      Set(set) => {
+        self.resolve_expr(&set.value);
+        self.resolve_expr(&set.obj);
+      },
+      This(this) => {
+        if self.state.class == ClassState::None {
+          self.error(
+            ErrorType::Error,
+            this.span,
+            "Illegal `this`: can't use `this` outside of a class"
+          )
+        }
+        self.resolve_binding(&this.name);
+      },
       Assignment(assign) => {
         self.resolve_expr(&assign.value);
         self.resolve_binding(&assign.name);
-      }
+      },
       Binary(binary) => {
         self.resolve_expr(&binary.left);
         self.resolve_expr(&binary.right);
-      }
+      },
       Logical(logical) => {
         self.resolve_expr(&logical.left);
         self.resolve_expr(&logical.right);
-      }
+      },
       Unary(unary) => self.resolve_expr(&unary.operand),
       Group(group) => self.resolve_expr(&group.expr),
       Lambda(lambda) => {
@@ -195,23 +245,28 @@ impl<'i> Resolver<'i> {
     };
   }
 
-  // fn _initialize(&mut self, ident: impl Into<String>) {
-  //   self
-  //     .scopes
-  //     .last_mut()
-  //     .unwrap()
-  //     .insert(ident.into(), BindingState::Initialized);
-  // }
+  fn initialize(&mut self, ident: impl Into<String>, _span: Span) {
+    self
+      .scopes
+      .last_mut()
+      .unwrap()
+      .insert(ident.into(), BindingState::Accessed);
+  }
 
   fn query(&mut self, ident: &LoxIdent, expected: BindingState) -> bool {
     self.scopes.last().and_then(|scope| scope.get(&ident.name)) == Some(&expected)
   }
 
   fn resolve_binding(&mut self, ident: &LoxIdent) {
-    for (depth, scope) in self.scopes.iter().rev().enumerate() {
+    let mut accessed = false;
+    for (depth, scope) in self.scopes.iter_mut().rev().enumerate() {
       if scope.contains_key(&ident.name) {
+        if depth == 0 { accessed = true; }
         self.interpreter.resolve_local(ident, depth);
       }
+    }
+    if accessed {
+      self.access(ident);
     }
   }
 
@@ -299,23 +354,23 @@ impl PartialEq for BindingState {
 #[derive(Debug, Default)]
 struct ResolverState {
   function: FunctionState,
-    // class: ClassState,
+  class: ClassState,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum FunctionState {
     None,
-    // Init,   // Class init
-    // Method, // Class method
+    Init,   // Class init
+    Method, // Class method
     Function,
 }
 
-// #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-// enum ClassState {
-//     None,
-//     Class,
-//     SubClass,
-// }
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum ClassState {
+    None,
+    Class,
+    // SubClass,
+}
 
 macro_rules! impl_default_for_state {
   ($($name:ident),+) => {
@@ -329,5 +384,4 @@ macro_rules! impl_default_for_state {
   }
 }
 
-// impl_default_for_state!(FunctionState, ClassState);
-impl_default_for_state!(FunctionState);
+impl_default_for_state!(FunctionState, ClassState);

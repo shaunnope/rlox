@@ -11,7 +11,7 @@ pub enum RuntimeError {
 
   UndefinedVariable { ident: LoxIdent },
   UnsetVariable { ident: LoxIdent },
-  // UndefinedProperty { ident: LoxIdent },
+  UndefinedProperty { ident: LoxIdent },
   ZeroDivision { span: Span },
 }
 
@@ -30,6 +30,15 @@ impl Display for RuntimeError {
           ident.name, ident.span
         )
       }
+
+      UndefinedProperty { ident } => {
+        write!(
+          f,
+          "Undefined property `{}`; at position {}",
+          ident.name, ident.span
+        )
+      }
+
       UnsetVariable { ident } => {
         write!(
           f,
@@ -51,7 +60,8 @@ impl RuntimeError {
     use RuntimeError::*;
     match self {
       UnsupportedType { span, .. } | ZeroDivision { span } => *span,
-      UndefinedVariable { ident } | UnsetVariable { ident } => ident.span,
+      UndefinedVariable { ident } | UnsetVariable { ident } |
+      UndefinedProperty { ident }=> ident.span,
     }
   }
 }

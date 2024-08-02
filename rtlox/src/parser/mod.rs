@@ -50,6 +50,7 @@ impl Parser<'_> {
     let res = match self.current_token.kind {
       Var => self.parse_var_decl(),
       Fun => self.parse_fun_decl(),
+      Class => self.parse_class_decl(),
       _ => self.parse_stmt(),
     };
 
@@ -95,6 +96,35 @@ impl Parser<'_> {
     Ok(Stmt::from(fun))
   }
 
+  fn parse_class_decl(&mut self) -> PResult<Stmt> {
+    use TokenType::*;
+    let class_span = self.consume(Class, S_MUST)?.span;
+
+    let name = self.consume_ident("Expected class name")?;
+
+    let (methods, class_body_span) = self.paired_spanned(
+      LeftBrace,
+      "Expected `{` before class body", 
+      "Expected `}` after class body", 
+      |this| {
+        let mut methods = Vec::new();
+        while !this.is(RightBrace) && !this.is_at_end() {
+          methods.push(this.parse_fun_params("method", None)?);
+        }
+
+        Ok(methods)
+      }
+    )?;
+
+    Ok(Stmt::from(stmt::ClassDecl {
+      span: class_span.to(class_body_span),
+      name,
+      // super_name,
+      methods,
+    }))
+
+  }
+  
   fn parse_lambda_decl(&mut self, fun: stmt::FunDecl) -> PResult<Stmt> {
     use TokenType::*;
     let start = fun.span;
@@ -414,18 +444,29 @@ impl Parser<'_> {
       let value = self.parse_assignment()?;
       let span = left.span().to(value.span());
 
-      if let Expr::Var(expr::Var { name, .. }) = left {
-        return Ok(Expr::from(expr::Assignment {
-          span,
-          name,
-          value: value.into(),
-        }));
+      return match left {
+        Expr::Var(expr::Var { name, .. }) => {
+          Ok(Expr::from(expr::Assignment {
+            span,
+            name,
+            value: value.into(),
+          }))
+        },
+        Expr::Get(expr::Get { name, obj, ..}) => {
+          Ok(Expr::from(expr::Set {
+            span,
+            obj,
+            name,
+            value: value.into()
+          }))
+        },
+        _ => {
+          Err(ParseError::Error {
+            message: "Invalid assignment target.".into(),
+            span: left.span(),
+          })
+        }
       }
-
-      return Err(ParseError::Error {
-        message: "Invalid assignment target.".into(),
-        span: left.span(),
-      });
     }
 
     Ok(left)
@@ -505,6 +546,22 @@ impl Parser<'_> {
     loop {
       expr = match self.current_token.kind {
         LeftParen => self.finish_call(expr)?,
+        Dot => {
+          if let Expr::Lambda(_) = expr {
+            return Err(ParseError::UnexpectedToken { 
+              message: "Unexpected property access on lambda function".into(), 
+              offending: self.current_token.clone(), 
+              expected: None
+            })
+          };
+          self.advance(); // Consume the `.`
+          let name = self.consume_ident("Expected property name after `.`")?;
+          Expr::from(expr::Get {
+            span: expr.span().to(name.span),
+            obj: expr.into(),
+            name
+          })
+        },
         _ => break,
       }
     }
@@ -579,6 +636,13 @@ impl Parser<'_> {
         Ok(Expr::from(expr::Var {
           span: name.span,
           name,
+        }))
+      },
+      This => {
+        let span = self.advance().span;
+        Ok(Expr::from(expr::This {
+          span,
+          name: LoxIdent::new(span, "this")
         }))
       }
       LeftParen => {

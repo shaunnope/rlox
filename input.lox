@@ -1,8 +1,13 @@
-var d = 1;
-{
-  var a = "unused";
-  var b;
-  var c = "used";
-  print c;
-  // var d = d + 1;
+class Cake {
+  init() {
+    return;
+  }
+  taste() {
+    var adjective = "delicious";
+    print "The " + this.flavor + " cake is " + adjective + "!";
+  }
 }
+
+var cake = Cake();
+cake.flavor = "German chocolate";
+cake.taste(); // Prints "The German chocolate cake is delicious!".

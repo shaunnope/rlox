@@ -1,12 +1,10 @@
 use std::{
-  fmt::{self, Debug, Display},
-  rc::Rc,
-  sync::atomic::{self, AtomicUsize},
+  cell::RefCell, collections::HashMap, fmt::{self, Debug, Display}, rc::Rc, sync::atomic::{self, AtomicUsize}
 };
 
 use crate::{
   ast::stmt::FunDecl,
-  interpreter::{control_flow::ControlFlow, environment::Environment, CFResult, Interpreter},
+  interpreter::{control_flow::ControlFlow, environment::Environment, error::RuntimeError, CFResult, Interpreter},
   span::Span,
   token::{Token, TokenType},
 };
@@ -14,6 +12,8 @@ use crate::{
 #[derive(Clone)]
 pub enum LoxValue {
   Function(Rc<dyn LoxCallable>),
+  Class(Rc<LoxClass>),
+  Object(Rc<LoxInstance>),
   Boolean(bool),
   Number(f64),
   String(String),
@@ -31,6 +31,8 @@ impl LoxValue {
       String(_) => "string",
       Nil => "nil",
       Function(_) => "<func>",
+      Class(_) => "<class>",
+      Object(_) => "<instance>",
       Unset => "<unset>",
     }
   }
@@ -40,7 +42,8 @@ impl LoxValue {
     use LoxValue::*;
     match self {
       Boolean(inner) => *inner,
-      Number(_) | String(_) | Function(_) => true,
+      Number(_) | String(_) | Function(_) | 
+      Class(_) | Object(_) => true,
       Nil => false,
       Unset => unreachable!("Invalid access of unset variable."),
     }
@@ -64,6 +67,8 @@ impl Display for LoxValue {
     use LoxValue::*;
     match self {
       Function(fun) => Display::fmt(fun, f),
+      Class(class) => Display::fmt(class, f),
+      Object(instance) => Display::fmt(instance, f),
       Boolean(boolean) => Display::fmt(boolean, f),
       Number(number) => {
         if number.floor() == *number {
@@ -171,6 +176,18 @@ pub struct LoxFunction {
   pub is_class_init: bool,
 }
 
+impl LoxFunction {
+  pub fn bind(&self, instance: &Rc<LoxInstance>) -> Rc<Self> {
+    let mut env = Environment::new_enclosed(&self.closure);
+    env.define("this", LoxValue::Object(instance.clone()));
+    Rc::new(LoxFunction {
+        decl: self.decl.clone(),
+        closure: env,
+        is_class_init: self.is_class_init,
+    })
+  }
+}
+
 impl LoxCallable for LoxFunction {
   fn call(self: Rc<Self>, interpreter: &mut Interpreter, args: &[LoxValue]) -> CFResult<LoxValue> {
     let mut env = Environment::new_enclosed(&self.closure);
@@ -185,7 +202,11 @@ impl LoxCallable for LoxFunction {
       Err(other) => return Err(other),
     };
 
-    Ok(res)
+    if self.is_class_init {
+      Ok(self.closure.read_at(0, "this"))
+    } else {
+      Ok(res)
+    }
   }
 
   fn arity(&self) -> usize {
@@ -228,5 +249,102 @@ impl Debug for NativeFunction {
       .field("fn_ptr", &"fn_ptr")
       .field("arity", &self.arity)
       .finish()
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxClass {
+  pub name: LoxIdent,
+  pub methods: HashMap<String, Rc<LoxFunction>>,
+}
+
+impl LoxClass {
+  pub fn get_method(&self, ident: impl AsRef<str>) -> Option<Rc<LoxFunction>> {
+    self.methods
+        .get(ident.as_ref())
+        .cloned()
+        .or_else(||None)
+  }
+}
+
+impl Display for LoxClass {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<class {}>", self.name)
+  }
+}
+
+impl LoxCallable for LoxClass {
+  fn call(
+    self: Rc<Self>, 
+    interpreter: &mut Interpreter, 
+    args: &[LoxValue]
+  ) -> CFResult<LoxValue> {
+    let instance = Rc::new(LoxInstance {
+      name: LoxIdent::new(
+        Span::new(0,0), 
+        self.name.name.clone()
+      ),
+      constructor: self,
+      properties: RefCell::new(HashMap::new()),
+    });
+    if let Some(init) = instance.get_bound_method("init") {
+      init.call(interpreter, args)?;
+    }
+
+    Ok(LoxValue::Object(instance))
+  }
+
+  fn arity(&self) -> usize {
+    if let Some(init) = self.get_method("init") {
+      init.arity()
+    } else {
+      0
+    }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxInstance {
+  pub constructor: Rc<LoxClass>,
+  pub name: LoxIdent,
+  properties: RefCell<HashMap<String, LoxValue>>
+}
+
+impl LoxInstance {
+  pub fn get(
+    self: &Rc<Self>, 
+    ident: &LoxIdent
+  ) -> Result<LoxValue, RuntimeError> {
+    // Fields looked up before properties (methods)
+    // => Shadows methods
+    if let Some(value) = self.properties.borrow().get(&ident.name) {
+      return Ok(value.clone());
+    }
+
+    if let Some(method) = self.get_bound_method(ident) {
+      return Ok(LoxValue::Function(method));
+    }
+
+    Err(RuntimeError::UndefinedProperty {
+      ident: ident.clone(),
+    })
+  }
+
+  pub fn set(&self, ident: &LoxIdent, value: LoxValue) {
+    self.properties
+      .borrow_mut()
+      .insert(ident.name.clone(), value);
+  }
+
+  pub fn get_bound_method(self: &Rc<Self>, ident: impl AsRef<str>) -> Option<Rc<LoxFunction>> {
+    self.constructor
+      .get_method(ident)
+      .map(|unbound| unbound.bind(self))
+  }
+}
+
+impl Display for LoxInstance {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<instance {}>", self.name)
   }
 }

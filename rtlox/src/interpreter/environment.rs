@@ -38,7 +38,7 @@ impl Environment {
   }
 
   /// Defines a variable
-  pub fn define(&mut self, name: LoxIdent, value: LoxValue) {
+  pub fn define(&mut self, name: impl Into<String>, value: LoxValue) {
     self.inner.borrow_mut().locals.insert(name.into(), value);
   }
 
