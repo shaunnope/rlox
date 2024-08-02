@@ -102,6 +102,12 @@ impl Parser<'_> {
 
     let name = self.consume_ident("Expected class name")?;
 
+    let super_name = if self.take(Less) {
+      Some(self.consume_ident("Expected superclass name")?)
+    } else {
+      None
+    };
+
     let (methods, class_body_span) = self.paired_spanned(
       LeftBrace,
       "Expected `{` before class body", 
@@ -119,7 +125,7 @@ impl Parser<'_> {
     Ok(Stmt::from(stmt::ClassDecl {
       span: class_span.to(class_body_span),
       name,
-      // super_name,
+      super_name,
       methods,
     }))
 
@@ -643,6 +649,16 @@ impl Parser<'_> {
         Ok(Expr::from(expr::This {
           span,
           name: LoxIdent::new(span, "this")
+        }))
+      }
+      Super => {
+        let span = self.advance().span;
+        self.consume(Dot, "Expected `.` after `super`")?;
+        let method = self.consume_ident("Expected a superclass method name")?;
+        Ok(Expr::from(expr::Super {
+          span: span.to(method.span), 
+          super_ident: LoxIdent::new(span, "super"), 
+          method
         }))
       }
       LeftParen => {

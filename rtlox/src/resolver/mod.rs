@@ -95,8 +95,26 @@ impl Resolver<'_> {
     self.declare(&class.name);
     self.define(&class.name);
 
+    if let Some(super_name) = &class.super_name {
+      if class.name.name == super_name.name {
+        self.error(
+          ErrorType::Error, super_name.span, 
+          "A class cannot inherit itself"
+        );
+      }
+
+      self.state.class = ClassState::SubClass;
+      self.resolve_binding(super_name);
+
+      // init a new scope with `super` defined
+      // for subclass to access superclass methods
+      self.begin_scope();
+      self.initialize("super")
+
+    }
+
     self.scoped(|this| {
-      this.initialize("this", class.span);
+      this.initialize("this");
       for method in &class.methods {
         let state = if method.name.name == "init" {
           FunctionState::Init
@@ -106,6 +124,10 @@ impl Resolver<'_> {
         this.resolve_fun(&method, state);
       }
     });
+
+    if class.super_name.is_some() {
+      self.end_scope();
+    }
 
     self.state.class = old_class_state;
   }
@@ -148,6 +170,22 @@ impl Resolver<'_> {
         }
         self.resolve_binding(&this.name);
       },
+      Super(sup) => {
+        match self.state.class {
+          ClassState::None => self.error(
+            ErrorType::Error,
+              sup.super_ident.span,
+              "Illegal `super`: can't use `super` outside of a class",
+          ),
+          ClassState::Class => self.error(
+            ErrorType::Error,
+              sup.super_ident.span,
+              "Illegal `super`: can't use `super` within a class with no superclass",
+          ),
+          _ => {}
+        }
+        self.resolve_binding(&sup.super_ident);
+      }
       Assignment(assign) => {
         self.resolve_expr(&assign.value);
         self.resolve_binding(&assign.name);
@@ -245,7 +283,7 @@ impl<'i> Resolver<'i> {
     };
   }
 
-  fn initialize(&mut self, ident: impl Into<String>, _span: Span) {
+  fn initialize(&mut self, ident: impl Into<String>) {
     self
       .scopes
       .last_mut()
@@ -369,7 +407,7 @@ enum FunctionState {
 enum ClassState {
     None,
     Class,
-    // SubClass,
+    SubClass,
 }
 
 macro_rules! impl_default_for_state {

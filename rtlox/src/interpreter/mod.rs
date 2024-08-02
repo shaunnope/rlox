@@ -87,8 +87,25 @@ impl Interpreter {
   }
 
   fn eval_class_decl(&mut self, decl: &stmt::ClassDecl) -> CFResult<()> {
-    self.env.define(decl.name.clone(), LoxValue::Nil);
+    let super_class = decl.super_name.as_ref()
+      .map(|name| {
+        let maybe_class = self.lookup_variable(name)?;
+        if let LoxValue::Class(class) = maybe_class {
+          Ok(class)
+        } else {
+          Err(ControlFlow::from(RuntimeError::UnsupportedType { 
+            message: format!("Superclass must be a class: got {}", maybe_class), 
+            span: name.span 
+          }))
+        }
+      })
+      .transpose()?;
 
+    if let Some(super_class) = super_class.clone() {
+      self.env = Environment::new_enclosed(&self.env);
+      self.env.define("super", LoxValue::Class(super_class));
+    }
+    
     let methods = decl.methods.iter().cloned()
       .map(|decl| {
         (
@@ -101,13 +118,18 @@ impl Interpreter {
         )
       }).collect();
 
-    self.env.assign(
-      &decl.name,
+    if super_class.is_some() {
+      self.env = self.env.enclosed().unwrap();
+    }
+
+    self.env.define(
+      decl.name.clone(),
       LoxValue::Class(Rc::new(LoxClass {
           name: decl.name.clone(),
+          super_class,
           methods,
       })),
-    )?;
+    );
 
     Ok(())
   }
@@ -162,6 +184,7 @@ impl Interpreter {
       Get(get) => self.eval_get_expr(get),
       Set(set) => self.eval_set_expr(set),
       This(this) => self.lookup_variable(&this.name),
+      Super(sup) => self.eval_super_expr(sup),
       Lit(lit) => self.eval_lit_expr(lit),
       Group(group) => self.eval_group_expr(group),
       Unary(unary) => self.eval_unary_expr(unary),
@@ -227,6 +250,34 @@ impl Interpreter {
     obj.set(&set.name, value.clone());
     Ok(value)
   }
+
+  fn eval_super_expr(&mut self, sup: &expr::Super) -> CFResult<LoxValue> {
+    // FOllowing two unwraps should never fail due to semantic verification
+    let dist = self.locals.get(&sup.super_ident.id).unwrap();
+    let super_class = self.env
+      .read_at(*dist, "super")
+      .as_class()
+      .unwrap();
+
+    // The environment where "this" is defined is always bound immediately inside the
+    // environment that defined "super" (the "this env" encloses the "super env").
+    let this = self.env
+      .read_at(dist - 1, "this")
+      .as_object()
+      .unwrap();
+
+      match super_class.get_method(&sup.method) {
+        Some(method) => Ok(
+          LoxValue::Function(
+          method.bind(&this))
+        ),
+        None => Err(ControlFlow::from(
+          RuntimeError::UndefinedProperty {
+          ident: sup.method.clone(),
+        })),
+      }
+  }
+
 
   fn eval_lit_expr(&mut self, lit: &expr::Lit) -> CFResult<LoxValue> {
     Ok(lit.value.clone())

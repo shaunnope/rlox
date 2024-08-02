@@ -24,6 +24,7 @@ pub struct FunDecl {
 pub struct ClassDecl {
   pub span: Span,
   pub name: LoxIdent,
+  pub super_name: Option<LoxIdent>,
   pub methods: Vec<FunDecl>,
 }
 

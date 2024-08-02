@@ -60,6 +60,23 @@ impl LoxValue {
       _ => false,
     }
   }
+
+  /// Returns the `Rc<LoxClass>` pointer if the given `LoxValue` is a class. Otherwise None.
+  pub fn as_class(self) -> Option<Rc<LoxClass>> {
+    match self {
+      LoxValue::Class(inner) => Some(inner),
+      _ => None,
+    }
+  }
+
+  /// Returns the `Rc<LoxInstance>` pointer if the given `LoxValue` is an object. Otherwise None.
+  pub fn as_object(self) -> Option<Rc<LoxInstance>> {
+    match self {
+        LoxValue::Object(inner) => Some(inner),
+        _ => None,
+    }
+  }
+
 }
 
 impl Display for LoxValue {
@@ -256,6 +273,7 @@ impl Debug for NativeFunction {
 pub struct LoxClass {
   pub name: LoxIdent,
   pub methods: HashMap<String, Rc<LoxFunction>>,
+  pub super_class: Option<Rc<LoxClass>>,
 }
 
 impl LoxClass {
@@ -263,7 +281,10 @@ impl LoxClass {
     self.methods
         .get(ident.as_ref())
         .cloned()
-        .or_else(||None)
+        .or_else(|| 
+          self.super_class.as_ref()
+          .and_then(|s| s.get_method(ident))
+        )
   }
 }
 
