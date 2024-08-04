@@ -1,4 +1,4 @@
 [workspace]
 
-members = ["rtlox"]
+members = [ "rblox","rtlox"]
 resolver = "2"

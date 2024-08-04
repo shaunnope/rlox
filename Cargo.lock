@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rblox"
+version = "0.1.0"
+
+[[package]]
 name = "rtlox"
 version = "0.1.0"
 dependencies = [
