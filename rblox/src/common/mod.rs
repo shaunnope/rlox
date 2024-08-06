@@ -6,6 +6,9 @@ pub mod debug;
 pub mod opcode;
 pub mod value;
 
-pub use opcode::OpCode;
+pub mod error;
+
+pub use opcode::Ins;
 pub use chunk::Chunk;
 pub use value::Value;
+pub use debug::span::Span;

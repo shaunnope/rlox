@@ -1,11 +1,14 @@
-use std::fmt::Display;
+use std::{
+  fmt::Debug,
+  ops::Neg
+};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Value {
   Number(f64)
 }
 
-impl Display for Value {
+impl Debug for Value {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     use Value::*;
     match self {
@@ -17,5 +20,21 @@ impl Display for Value {
         }
       },
     }
+  }
+}
+
+impl Neg for Value {
+  type Output = Self;
+  fn neg(self) -> Self::Output {
+    use Value::*;
+    match self {
+      Number(n) => Number(-n)
+    }
+  }
+}
+
+impl From<f64> for Value {
+  fn from(value: f64) -> Self {
+    Self::Number(value)
   }
 }
