@@ -1,6 +1,7 @@
 mod common;
 mod vm;
 mod compiler;
+mod gc;
 mod user;
 
 use std::str;

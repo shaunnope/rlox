@@ -55,3 +55,13 @@ fn process_types() {
     eprintln!("{err:?}")
   };
 }
+
+#[test]
+fn concat_strings() {
+  let source = "\"st\" + \"ri\" + \"ng\"";
+  let mut vm = VM::new();
+
+  if let Err(err) = vm.run(source) {
+    eprintln!("{err:?}")
+  };
+}

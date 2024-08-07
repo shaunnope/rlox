@@ -48,7 +48,8 @@ pub enum ParseFn {
   Binary,
   Unary,
   Number,
-  Literal
+  Literal,
+  String
 }
 
 pub struct ParseRule(pub ParseFn, pub ParseFn, pub Precedence);
@@ -77,6 +78,8 @@ impl From<&TokenType> for ParseRule {
 
       T::Number(_) => Self(F::Number, F::None, P::None),
       T::True | T::False | T::Nil => Self(F::Literal, F::None, P::None),
+      T::String(_) => Self(F::String, F::None, P::None),
+
       _ => Self(F::None, F::None, P::None),
     }
   }

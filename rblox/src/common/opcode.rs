@@ -1,6 +1,6 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, rc::Rc};
 
-use crate::common::Value;
+use crate::common::{Value, data::LoxObject};
 
 #[derive(Clone, PartialEq)]
 pub enum Ins {
@@ -47,5 +47,11 @@ impl Debug for Ins {
 impl From<f64> for Ins {
   fn from(value: f64) -> Self {
     Self::Constant(Value::from(value))
+  }
+}
+
+impl From<LoxObject> for Ins {
+  fn from(value: LoxObject) -> Self {
+    Self::Constant(Value::Object(Rc::new(value)))
   }
 }

@@ -1,13 +1,17 @@
 use std::{
-  fmt::Debug,
-  ops::{Neg, Not}
+  fmt::{Debug, Display},
+  ops::{Neg, Not},
+  rc::Rc
 };
+
+use crate::common::data::LoxObject;
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
   Boolean(bool),
   Nil,
   Number(f64),
+  Object(Rc<LoxObject>)
 }
 
 impl Value {
@@ -17,11 +21,8 @@ impl Value {
     match self {
       Boolean(_) => "boolean",
       Number(_) => "number",
-      // String(_) => "string",
       Nil => "nil",
-      // Function(_) => "<func>",
-      // Class(_) => "<class>",
-      // Object(_) => "<instance>",
+      Object(obj) => obj.type_name()
       // Unset => "<unset>",
     }
   }
@@ -41,8 +42,8 @@ impl Value {
     match (self, other) {
       (Boolean(a), Boolean(b)) => a == b,
       (Number(a), Number(b)) => a == b,
-      // (String(a), String(b)) => a == b,
       (Nil, Nil) => true,
+      (Object(a), Object(b)) => a == b,
       _ => false,
     }
   }
@@ -53,15 +54,26 @@ impl Debug for Value {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     use Value::*;
     match self {
-      Boolean(b) => b.fmt(f),
+      Boolean(b) => write!(f, "{b}"),
       Nil => write!(f, "nil"),
       Number(n) => {
         if n.floor() == *n {
-          write!(f, "{:.0}", n)
+          write!(f, "{n:.0}")
         } else {
-          write!(f, "{}", n)
+          write!(f, "{n}")
         }
       },
+      Object(obj) => write!(f, "{obj:?}")
+    }
+  }
+}
+
+impl Display for Value {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use Value::*;
+    match self {
+      Object(obj) => write!(f, "{obj}"),
+      other => write!(f, "{other:?}")
     }
   }
 }

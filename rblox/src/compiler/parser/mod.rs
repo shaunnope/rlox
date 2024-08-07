@@ -7,7 +7,7 @@ use rules::ParseFn;
 
 use crate::{
   common::{
-    Chunk, Ins, Span
+    data::LoxObject, Chunk, Ins, Span, Value
   },
   compiler::{
     parser::{
@@ -16,8 +16,7 @@ use crate::{
       state::ParserOptions
     },
     scanner::{
-      Scanner,
-      token::{Token, TokenType}
+      token::{Token, TokenType}, Scanner
     },
   }
 };
@@ -104,6 +103,19 @@ impl Parser<'_> {
     };
 
     emit(ins, prev.span, self.current_chunk());
+    Ok(())
+  }
+
+  fn parse_string(&mut self) -> PResult<()> {
+    let prev = self.prev_token.clone();
+    match prev.kind {
+      TokenType::String(s) => emit(
+        Ins::from(LoxObject::String(s)), 
+        prev.span, 
+        self.current_chunk()
+      ),
+      _ => unreachable!()
+    };
     Ok(())
   }
 
@@ -194,6 +206,7 @@ impl Parser<'_> {
       F::Unary => self.parse_unary(),
       F::Number => self.parse_number(),
       F::Literal => self.parse_literal(),
+      F::String => self.parse_string(),
       F::None => none_return
     }
   }

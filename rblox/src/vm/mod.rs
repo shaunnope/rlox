@@ -1,11 +1,15 @@
+use std::rc::Rc;
+
 use crate::{
   common::{
+    data::LoxObject,
     error::{Error, ErrorLevel, ErrorType, LoxResult}, 
     Chunk, 
     Ins, 
     Value
   }, 
   compiler::compile,
+  gc::mman::MemManager,
   vm::error::RuntimeError
 };
 
@@ -15,7 +19,8 @@ mod tests;
 pub mod error;
 
 pub struct VM {
-  stack: Vec<Value>
+  stack: Vec<Value>,
+  objects: MemManager
 }
 
 
@@ -49,9 +54,9 @@ impl VM {
     use Ins::*;
     use Value as V;
     for (inst, span ) in chunk.iter_zip() {
-      if cfg!(debug_assertions) {
-        display_instr(&self.stack, &inst);
-      }
+      // if cfg!(debug_assertions) {
+      //   display_instr(&self.stack, &inst);
+      // }
 
       match inst {
         Constant(n) => self.push(n.clone()),
@@ -75,7 +80,32 @@ impl VM {
             ),
           };
         },
-        Add => bin_num_op!(self, +, *span),
+        Add => {
+          let b = self.pop();
+          let a = self.pop();
+
+          use Value::*;
+          use LoxObject as L;
+          let out = match (a, b) {
+            (Number(a), Number(b)) => Number(a + b),
+            (Object(a), b) if a.is_type(L::String("".into()))
+            => {
+              let L::String(a) = &*a;
+              Object(Rc::new(L::String(a.to_owned() + &b.to_string())))
+            },
+            (a, b) => return Err(RuntimeError::UnsupportedType {
+              level: ErrorLevel::Error,
+              message: format!(
+                "Binary `+` operator can only operate over two numbers or strings. \
+                Got types `{}` and `{}`",
+                a.type_name(),
+                b.type_name()
+              ),
+              span: *span,
+            })
+          };
+          self.push(out);        
+        },
         Subtract => bin_num_op!(self, -, *span),
         Multiply => bin_num_op!(self, *, *span),
         Divide => bin_num_op!(self, /, *span),
@@ -111,12 +141,16 @@ impl VM {
 impl VM {
   pub fn new() -> Self {
     Self {
-      stack: Vec::new()
+      stack: Vec::new(),
+      objects: MemManager::new()
     }
   }
 
   /// Push value onto stack
   fn push(&mut self, value: Value) {
+    if let Value::Object(obj) = &value {
+      self.objects.push(obj);
+    }
     self.stack.push(value);
   }
 
