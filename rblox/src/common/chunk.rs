@@ -1,56 +1,57 @@
-use std::fmt::Display;
+use std::{fmt::Display, iter::Zip, slice::Iter};
 
-use crate::common::Ins;
+use crate::common::{Ins, Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chunk {
   pub name: String,
   pub code: Vec<Ins>,
-  lines: Vec<(usize, u32)>
+  spans: Vec<Span>,
+  // lines: Vec<(usize, u32)>
 }
 
-impl Chunk  {
+impl Chunk {
   pub fn new(name: impl Into<String>) -> Self {
-    let mut lines = Vec::new();
-    lines.push((0,0));
+    // let mut lines = Vec::new();
+    // lines.push((0,0));
     Self {
       name: name.into(),
       code: Vec::new(),
-      lines
+      spans: Vec::new(),
+      // lines
     }
   }
 
   /// Write an instruction to the chunk
-  pub fn write(&mut self, ins: Ins, line: u32) {
+  pub fn write(&mut self, ins: Ins, span: Span) {
     self.code.push(ins);
-    let last = self.lines.last_mut().unwrap();
-    let count = last.0;
-    if line == last.1 {
-      *last = (last.0 + 1, last.1);
-    } else {
-      self.lines.push((count + 1, line));
-    }
+    self.spans.push(span);
   }
 
-  /// Get the line of an instruction from the stored run-length encoding
-  fn _get_line(&self, idx: usize) -> u32 {
-    // Should never panic since only valid indices should be passed into this function
-    let line = self.lines.binary_search_by(|probe| {
-      probe.0.cmp(&(idx+1))
-    }).unwrap();
-    self.lines[line].1
+  // /// Get the line of an instruction from the stored run-length encoding
+  // fn _get_line(&self, idx: usize) -> u32 {
+  //   // Should never panic since only valid indices should be passed into this function
+  //   let line = self.lines.binary_search_by(|probe| {
+  //     probe.0.cmp(&(idx+1))
+  //   }).unwrap();
+  //   self.lines[line].1
+  // }
+
+  pub fn iter_zip(&self) -> Zip<Iter<Ins>, Iter<Span>> {
+    self.code.iter().zip(self.spans.iter())
   }
+
 }
 
 
 impl Display for Chunk {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     writeln!(f, "=== {} ===", self.name)?;
-    let mut line_idx = 0;
-    for (idx, ins) in self.code.iter().enumerate() {
-      if idx+1 > self.lines[line_idx].0 {
-        line_idx += 1;
-        write!(f, "{:>3}", self.lines[line_idx].1)?;
+    let mut last_line = 0;
+    for (ins, span) in self.code.iter().zip(self.spans.iter()) {
+      if last_line != span.2 {
+        last_line = span.2;
+        write!(f, "{:>3}", last_line)?;
       } else {
         f.write_str("  .")?;
       }

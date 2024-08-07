@@ -72,8 +72,17 @@ impl Error for ParseError {
     ErrorLevel::Error
   }
 
-  fn get_type(&self) -> crate::common::error::ErrorType {
+  fn get_type(&self) -> ErrorType {
     ErrorType::CompileError
+  }
+
+  fn get_span(&self) -> Span {
+    use ParseError::*;
+      match self {
+        Error {span, ..} | ScanError {span, ..} => *span,
+        UnexpectedToken {offending, ..} => offending.span,
+        DetectedLambda => Span::new(0, 0, 0),
+      }
   }
 }
 

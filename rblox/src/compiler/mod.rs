@@ -1,6 +1,6 @@
 
 use crate::{
-  common::{Chunk, Ins},
+  common::{Chunk, Ins, Span},
   compiler::parser::{Parser, ParserOutcome}
 };
 
@@ -16,6 +16,6 @@ pub fn compile(src: &str) -> ParserOutcome {
   parser.parse()  
 }
 
-pub fn emit(ins: Ins, line: u32, chunk: &mut Chunk) {
-  chunk.write(ins, line);
+pub fn emit(ins: Ins, span: Span, chunk: &mut Chunk) {
+  chunk.write(ins, span);
 }

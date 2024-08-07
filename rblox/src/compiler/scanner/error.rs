@@ -1,7 +1,5 @@
 use std::fmt::{self, Display};
 
-use crate::common::error::{Error, ErrorLevel, ErrorType};
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScanError {
   UnexpectedChar(char),
@@ -28,15 +26,5 @@ impl ScanError {
   /// Checks if the error allows REPL continuation (aka. "..." prompt).
   pub fn allows_continuation(&self) -> bool {
     matches!(self, ScanError::UnterminatedString)
-  }
-}
-
-impl Error for ScanError {
-  fn get_level(&self) -> ErrorLevel {
-    ErrorLevel::Error
-  }
-
-  fn get_type(&self) -> ErrorType {
-    ErrorType::CompileError
   }
 }

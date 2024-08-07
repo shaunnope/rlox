@@ -1,60 +1,50 @@
 use std::fmt::{Debug, Display};
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+use super::Span;
+
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum ErrorLevel {
-  _Debug,
+  _Info,
   _Warning,
   Error
 }
 
-#[derive(Debug)]
+impl Debug for ErrorLevel {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use ErrorLevel::*;
+    match self {
+      _Info => write!(f, "INFO"),
+      _Warning => write!(f, "WARNING"),
+      Error => write!(f, "ERROR"),
+    }
+  }
+}
+
 pub enum ErrorType {
   Error,
   CompileError,
-  _RuntimeError,
+  RuntimeError,
+}
+
+impl Debug for ErrorType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      use ErrorType::*;
+      match self {
+        Error => write!(f, "Error"),
+        CompileError => write!(f, "Compile Error"),
+        RuntimeError => write!(f, "Runtime Error"),
+      }
+  }
 }
 
 pub trait Error: Display + Debug {
   fn get_level(&self) -> ErrorLevel;
   fn get_type(&self) -> ErrorType;
+  fn get_span(&self) -> Span;
+
+  fn report(&self) {
+    eprintln!("[{:?} line {}] {:?}: {}", self.get_level(), self.get_span().2, self.get_type(), self)
+  }
 }
 
 pub type LoxResult<T> = Result<(), T>;
-
-// pub enum LoxError {
-//   Error(Box<dyn Error>),
-//   CompileError(Box<dyn Error>),
-//   RuntimeError(Box<dyn Error>),
-// }
-
-
-// impl LoxError {
-//   pub fn dummy() -> Self {
-//     Self::Error(Box::new(DummyError {}))
-//   }
-
-//   pub fn get_level(&self) -> ErrorLevel {
-//     use LoxError::*;
-//     match self {
-//       Error(err) | CompileError(err) | RuntimeError(err) => err.get_level()
-//     }
-//   }
-// }
-
-#[derive(Debug)]
-pub struct DummyError {}
-
-impl Display for DummyError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{:?}", self)
-  }
-}
-
-impl Error for DummyError {
-  fn get_level(&self) -> ErrorLevel {
-    ErrorLevel::Error
-  }
-  fn get_type(&self) -> ErrorType {
-    ErrorType::Error
-  }
-}

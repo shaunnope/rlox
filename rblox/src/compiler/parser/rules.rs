@@ -47,7 +47,8 @@ pub enum ParseFn {
   Group,
   Binary,
   Unary,
-  Number
+  Number,
+  Literal
 }
 
 pub struct ParseRule(pub ParseFn, pub ParseFn, pub Precedence);
@@ -60,11 +61,22 @@ impl From<&TokenType> for ParseRule {
     match value {
       T::EOF => Self(F::None, F::None, P::None),
       T::LeftParen => Self(F::Group, F::None, P::None),
+
       T::Minus => Self(F::Unary, F::Binary, P::Term),
       T::Plus => Self(F::None, F::Binary, P::Term),
-      T::Slash |
-      T::Star => Self(F::None, F::Binary, P::Factor),
+      T::Slash | T::Star
+      => Self(F::None, F::Binary, P::Factor),
+
+      T::Bang => Self(F::Unary, F::None, P::None),
+      T::BangEqual | T::EqualEqual 
+      => Self(F::None, F::Binary, P::Equality),
+
+      T::Greater | T::GreaterEqual |
+      T::Less | T::LessEqual 
+      => Self(F::None, F::Binary, P::Comparision),
+
       T::Number(_) => Self(F::Number, F::None, P::None),
+      T::True | T::False | T::Nil => Self(F::Literal, F::None, P::None),
       _ => Self(F::None, F::None, P::None),
     }
   }

@@ -64,7 +64,11 @@ impl Parser<'_> {
     }
 
     if !self.is(TokenType::EOF) {
-      self.diagnostics.push(ParseError::UnexpectedToken { message: "Expected end of expression".into(), offending: self.current_token.clone(), expected: Some(TokenType::EOF) })
+      self.diagnostics.push(ParseError::UnexpectedToken { 
+        message: "Expected end of expression".into(), 
+        offending: self.current_token.clone(), 
+        expected: Some(TokenType::EOF) 
+      })
     }
   }
 
@@ -77,7 +81,7 @@ impl Parser<'_> {
     let prev = self.prev_token.clone();
 
     if let TokenType::Number(n) = prev.kind {
-      emit(Ins::from(n), prev.span.2, self.current_chunk());
+      emit(Ins::from(n), prev.span, self.current_chunk());
     } else {
       return Err(ParseError::UnexpectedToken { 
         message: "Expected a number".into(), 
@@ -86,6 +90,20 @@ impl Parser<'_> {
       })
     }
     
+    Ok(())
+  }
+
+  fn parse_literal(&mut self) -> PResult<()> {
+    let prev = self.prev_token.clone();
+    use TokenType::*;
+    let ins = match prev.kind {
+      True => Ins::True,
+      False => Ins::False,
+      Nil => Ins::Nil,
+      _ => unreachable!()
+    };
+
+    emit(ins, prev.span, self.current_chunk());
     Ok(())
   }
 
@@ -99,12 +117,13 @@ impl Parser<'_> {
     let op = self.prev_token.clone();
     self.parse_precedence(Precedence::Unary)?;
     
-    use Ins as R;
-    match op.kind {
-      TokenType::Minus => emit(R::Negate, op.span.2, self.current_chunk()),
-
+    let ins = match op.kind {
+      TokenType::Minus => Ins::Negate,
+      TokenType::Bang => Ins::Not,
       _ => unreachable!()
-    }
+    };
+
+    emit(ins, op.span, self.current_chunk());
 
     Ok(())
   }
@@ -116,15 +135,30 @@ impl Parser<'_> {
     self.parse_precedence(rule.2.update(1))?;
 
     use TokenType::*;
-    let ins = match op.kind {
-      Plus => Ins::Add,
-      Minus => Ins::Subtract,
-      Star => Ins::Multiply,
-      Slash => Ins::Divide,
+    match op.kind {
+      Plus => emit(Ins::Add, op.span, self.current_chunk()),
+      Minus => emit(Ins::Subtract, op.span, self.current_chunk()),
+      Star => emit(Ins::Multiply, op.span, self.current_chunk()),
+      Slash => emit(Ins::Divide, op.span, self.current_chunk()),
+
+      BangEqual => {
+        emit(Ins::Equal, op.span, self.current_chunk());
+        emit(Ins::Not, op.span, self.current_chunk());
+      }
+      EqualEqual => emit(Ins::Equal, op.span, self.current_chunk()),
+      Greater => emit(Ins::Greater, op.span, self.current_chunk()),
+      GreaterEqual => {
+        emit(Ins::Less, op.span, self.current_chunk());
+        emit(Ins::Not, op.span, self.current_chunk());
+      },
+      Less => emit(Ins::Less, op.span, self.current_chunk()),
+      LessEqual => {
+        emit(Ins::Greater, op.span, self.current_chunk());
+        emit(Ins::Not, op.span, self.current_chunk());
+      },
+
       _ => unreachable!()
     };
-
-    emit(ins, op.span.2, self.current_chunk());
 
     Ok(())
   }
@@ -159,6 +193,7 @@ impl Parser<'_> {
       F::Binary => self.parse_binary(),
       F::Unary => self.parse_unary(),
       F::Number => self.parse_number(),
+      F::Literal => self.parse_literal(),
       F::None => none_return
     }
   }
@@ -205,7 +240,7 @@ impl<'src> Parser<'src> {
             span: maybe_next.span,
           });
         }
-        // Handle other common ignored kinds: (skipped directly in scanner)
+        // Handle other common ignored kinds
         Comment(_) | BlockComment(_, _) | Whitespace(_) => continue,
         _ => break maybe_next,
       };

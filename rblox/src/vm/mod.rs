@@ -1,15 +1,18 @@
 use crate::{
   common::{
-    error::{LoxResult, ErrorType}, 
+    error::{Error, ErrorLevel, ErrorType, LoxResult}, 
     Chunk, 
     Ins, 
     Value
   }, 
-  compiler::compile
+  compiler::compile,
+  vm::error::RuntimeError
 };
 
 #[cfg(test)]
 mod tests;
+
+pub mod error;
 
 pub struct VM {
   stack: Vec<Value>
@@ -23,7 +26,7 @@ impl VM {
     if compile_errors.len() > 0 {
       // report errors and exit
       for err in compile_errors {
-        eprintln!("{}", err)
+        err.report();
       }
       return Err(ErrorType::CompileError)
     }
@@ -35,36 +38,70 @@ impl VM {
     }
 
     match self.interpret(chunk) {
-      Err(_) => Err(ErrorType::CompileError),
+      Err(err) => {
+        err.report();
+        Err(ErrorType::CompileError)
+      },
       Ok(_) => Ok(())
     }
   }
-  pub fn interpret(&mut self, chunk: Chunk) -> LoxResult<()> {
+  pub fn interpret(&mut self, chunk: Chunk) -> LoxResult<RuntimeError> {
     use Ins::*;
-    for inst in chunk.code {
-      // if cfg!(debug_assertions) {
-      //   display_instr(&self.stack, &inst);
-      // }
+    use Value as V;
+    for (inst, span ) in chunk.iter_zip() {
+      if cfg!(debug_assertions) {
+        display_instr(&self.stack, &inst);
+      }
 
       match inst {
-        Constant(n) => self.push(n),
+        Constant(n) => self.push(n.clone()),
+        True => self.push(Value::Boolean(true)),
+        False => self.push(Value::Boolean(false)),
+        Nil => self.push(Value::Nil),
+
         Negate => {
           let val = self.pop();
-          self.stack.push(-val);
+          match val {
+            V::Number(_) => self.push(-val),
+            unexpected => return Err(
+              RuntimeError::UnsupportedType {
+                level: ErrorLevel::Error,
+                message: format!(
+                  "Bad type for unary `-` operator: `{}`",
+                  unexpected.type_name()
+                ),
+                span: *span,
+              },
+            ),
+          };
         },
-        Add => arith_bin!(self, +),
-        Subtract => arith_bin!(self, -),
-        Multiply => arith_bin!(self, *),
-        Divide => arith_bin!(self, /),
+        Add => bin_num_op!(self, +, *span),
+        Subtract => bin_num_op!(self, -, *span),
+        Multiply => bin_num_op!(self, *, *span),
+        Divide => bin_num_op!(self, /, *span),
+
+        Equal => {
+          let a = self.pop();
+          let b = self.pop();
+          self.push(Value::Boolean(a.equals(&b)));
+        }
+        Greater => bin_cmp_op!(self, >, *span),
+        Less => bin_cmp_op!(self, <, *span),
+
+        Not => {
+          let val = self.pop();
+          self.push(Value::Boolean(!val))
+        },
+
         Return => {
           if let Some(val) = self.stack.pop() {
             println!("{:?}", val);
             return Ok(())
           } else {
-            return Err(())
+            return Err(RuntimeError::EmptyStack { span: *span })
           }          
         },
-        // _ => {}
+        _ => {}
       }
     }
     Ok(())
@@ -78,33 +115,82 @@ impl VM {
     }
   }
 
+  /// Push value onto stack
   fn push(&mut self, value: Value) {
     self.stack.push(value);
   }
 
+  /// Pop value from stack.
   fn pop(&mut self) -> Value {
+    // should not panic due to correctness of parser
     self.stack.pop().unwrap()
+  }
+
+  /// Peek at value a relative distance from the top of stack.
+  fn peek(&mut self, distance: usize) -> Option<&Value> {
+    if self.stack.len()-1 < distance {
+      None
+    } else {
+      Some(&self.stack[self.stack.len()-1-distance])
+    }
   }
 }
 
 fn display_instr(stack: &[Value], inst: &Ins) {
-  print!("          [ ");
+  print!("[ ");
   for slot in stack.iter() {
     print!("{slot:?}, ");
   }
-  println!("]\n{:?}\n", inst);
+  println!("]\n{:?}", inst);
 
 }
 
-macro_rules! arith_bin {
-  ($self:expr, $op:tt) => {{
+macro_rules! bin_num_op {
+  ($self:expr, $op:tt, $span:expr) => {{
     let b = $self.pop();
     let a = $self.pop();
     use Value::*;
     let out = match (a, b) {
       (Number(a), Number(b)) => Number(a $op b),
+      (a, b) => return Err(
+        RuntimeError::UnsupportedType {
+          level: ErrorLevel::Error,
+          message: format!(
+            "Binary `{}` operator can only operate over two numbers. \
+            Got types `{}` and `{}`",
+            stringify!($op),
+            a.type_name(),
+            b.type_name()
+          ),
+          span: $span,
+        }) 
     };
     $self.push(out);
   }}
 }
-use arith_bin;
+use bin_num_op;
+
+macro_rules! bin_cmp_op {
+  ($self:expr, $op:tt, $span:expr) => {{
+    let b = $self.pop();
+    let a = $self.pop();
+    use Value::*;
+    let out = match (a, b) {
+      (Number(a), Number(b)) => Boolean(a $op b),
+      (a, b) => return Err(
+        RuntimeError::UnsupportedType {
+          level: ErrorLevel::Error,
+          message: format!(
+            "Binary `{}` operator can only compare two numbers. \
+            Got types `{}` and `{}`",
+            stringify!($op),
+            a.type_name(),
+            b.type_name()
+          ),
+          span: $span,
+        }) 
+    };
+    $self.push(out);
+  }}
+}
+use bin_cmp_op;

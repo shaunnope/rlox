@@ -15,6 +15,11 @@ impl Span {
     Span(min(lo, hi), max(lo, hi), line)
   }
 
+  #[cfg(test)]
+  pub fn dummy(line: u32) -> Span {
+    Span::new(0,0,line)
+  }
+
   /// Create a new span encompassing `self` and `other`.
   pub fn to(&self, other: Span) -> Span {
     Span::new(min(self.0, other.0), max(self.1, other.1), min(self.2, other.2))
