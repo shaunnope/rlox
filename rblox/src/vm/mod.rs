@@ -1,9 +1,9 @@
-use std::rc::Rc;
+use std::collections::HashMap;
 
 use crate::{
   common::{
     data::LoxObject,
-    error::{Error, ErrorLevel, ErrorType, LoxResult}, 
+    error::{LoxError, ErrorLevel, ErrorType, LoxResult}, 
     Chunk, 
     Ins, 
     Value
@@ -20,6 +20,7 @@ pub mod error;
 
 pub struct VM {
   stack: Vec<Value>,
+  globals: HashMap<String, Value>,
   objects: MemManager
 }
 
@@ -90,10 +91,15 @@ impl VM {
             (Number(a), Number(b)) => Number(a + b),
             (Object(a), b) if a.is_type(L::String("".into()))
             => {
-              let L::String(a) = &*a;
-              // Object(Rc::new(L::String(a.to_owned() + &b.to_string())));
-              let obj = self.objects.add_string(&(a.to_owned() + &b.to_string()));
-              Object(obj)
+              match &*a {
+                L::String(a) => {
+                  let obj = self.objects.add_string(
+                    &(a.to_owned() + &b.to_string())
+                  );
+                  Object(obj)
+                },
+                _ => unreachable!()
+              }
             },
             (a, b) => return Err(RuntimeError::UnsupportedType {
               level: ErrorLevel::Error,
@@ -110,7 +116,7 @@ impl VM {
         },
         Subtract => bin_num_op!(self, -, *span),
         Multiply => bin_num_op!(self, *, *span),
-        Divide => bin_num_op!(self, /, *span),
+        Divide => bin_num_op!(self, /, *span), // TODO:  Raise ZeroDivision error
 
         Equal => {
           let a = self.pop();
@@ -125,15 +131,41 @@ impl VM {
           self.push(Value::Boolean(!val))
         },
 
-        Return => {
-          if let Some(val) = self.stack.pop() {
-            println!("{:?}", val);
-            return Ok(())
-          } else {
-            return Err(RuntimeError::EmptyStack { span: *span })
-          }          
-        },
-        _ => {}
+        Print => {
+          println!("{}", self.pop())
+        }
+        Pop => { self.pop(); },
+
+        DefGlobal(name) => {
+          let val = self.peek(0).unwrap().to_owned();
+          self.globals.insert(name.to_owned(), val);
+          self.pop();
+        }
+        GetGlobal(name) => {
+          match self.globals.get(name) {
+            Some(val) => {
+              self.push(val.clone());
+            },
+            None => return Err(RuntimeError::UndefinedVariable { 
+              name: name.into(),
+              span: *span 
+            })
+          }
+        }
+        SetGlobal(name) => {
+          if !self.globals.contains_key(name) {
+            return Err(RuntimeError::UndefinedVariable { 
+              name: name.into(), 
+              span: *span, 
+            })
+          }
+
+          let val = self.peek(0).unwrap().to_owned();
+          self.globals.insert(name.into(), val);
+        }
+
+        Return => {},
+        // _ => {}
       }
     }
     Ok(())
@@ -144,6 +176,7 @@ impl VM {
   pub fn new() -> Self {
     Self {
       stack: Vec::new(),
+      globals: HashMap::new(),
       objects: MemManager::new()
     }
   }

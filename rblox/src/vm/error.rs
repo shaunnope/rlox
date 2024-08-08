@@ -1,7 +1,7 @@
-use std::fmt::{self, Display};
+use std::{error::Error, fmt::{self, Display}};
 
 use crate::common::{
-  error::{Error, ErrorLevel, ErrorType},
+  error::{LoxError, ErrorLevel, ErrorType},
   Span
 };
 
@@ -11,8 +11,7 @@ use crate::common::{
 pub enum RuntimeError {
   UnsupportedType { message: String, span: Span, level: ErrorLevel },
 
-  // UndefinedVariable { ident: LoxIdent },
-  // UnsetVariable { ident: LoxIdent },
+  UndefinedVariable { name: String, span: Span },
   // UndefinedProperty { ident: LoxIdent },
   ZeroDivision { span: Span },
   EmptyStack { span: Span }
@@ -26,26 +25,18 @@ impl Display for RuntimeError {
         write!(f, "{}; at position {}", message, span)
       }
 
-      // UndefinedVariable { ident } => {
-      //   write!(
-      //     f,
-      //     "Undefined variable `{}`; at position {}",
-      //     ident.name, ident.span
-      //   )
-      // }
+      UndefinedVariable { name, span } => {
+        write!(
+          f,
+          "Undefined variable `{}`; at position {}",
+          name, span
+        )
+      }
 
       // UndefinedProperty { ident } => {
       //   write!(
       //     f,
       //     "Undefined property `{}`; at position {}",
-      //     ident.name, ident.span
-      //   )
-      // }
-
-      // UnsetVariable { ident } => {
-      //   write!(
-      //     f,
-      //     "Variable `{}` uninitialized before access; at position {}",
       //     ident.name, ident.span
       //   )
       // }
@@ -67,22 +58,25 @@ impl RuntimeError {
     use RuntimeError::*;
     match self {
       UnsupportedType { span, .. } 
+      | UndefinedVariable { span, ..}
       | ZeroDivision { span } 
       | EmptyStack { span }
       => *span,
-      // UndefinedVariable { ident } | UnsetVariable { ident } |
       // UndefinedProperty { ident }=> ident.span,
     }
   }
 }
 
-impl Error for RuntimeError {
+impl Error for RuntimeError {}
+
+impl LoxError for RuntimeError {
   fn get_level(&self) -> ErrorLevel {
     use RuntimeError::*;
     match self {
       UnsupportedType {level, ..} => level.clone(),
       ZeroDivision {..}
       | EmptyStack {..}
+      | UndefinedVariable {..}
       => ErrorLevel::Error,
     }
   }

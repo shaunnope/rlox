@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+  error::Error as StdError,
+  fmt::Debug
+};
 
 use super::Span;
 
@@ -37,7 +40,7 @@ impl Debug for ErrorType {
   }
 }
 
-pub trait Error: Display + Debug {
+pub trait LoxError: StdError {
   fn get_level(&self) -> ErrorLevel;
   fn get_type(&self) -> ErrorType;
   fn get_span(&self) -> Span;

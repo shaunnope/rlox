@@ -5,6 +5,9 @@ use crate::common::Span;
 #[cfg(test)]
 mod challenges;
 
+#[cfg(test)]
+mod globals;
+
 #[test]
 fn correct_arith() {
   let mut vm = VM::new();

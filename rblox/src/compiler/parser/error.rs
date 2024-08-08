@@ -1,11 +1,11 @@
 use std::{
-  // error::Error,
+  error::Error,
   fmt::{self, Display},
 };
 
 use crate::{
   common::{
-    error::{Error, ErrorLevel, ErrorType}, 
+    error::{LoxError, ErrorLevel, ErrorType}, 
     Span,
   }, 
   compiler::scanner::{
@@ -67,7 +67,9 @@ impl Display for ParseError {
   }
 }
 
-impl Error for ParseError {
+impl Error for ParseError {}
+
+impl LoxError for ParseError {
   fn get_level(&self) -> ErrorLevel {
     ErrorLevel::Error
   }

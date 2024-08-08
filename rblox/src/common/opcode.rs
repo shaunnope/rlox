@@ -11,8 +11,14 @@ pub enum Ins {
   Add, Subtract, Multiply, Divide,
   Negate,
 
-  Not, Or, And, 
+  Not, // Or, And, 
   Equal, Greater, Less,
+
+  DefGlobal(String),
+  GetGlobal(String),
+  SetGlobal(String),
+
+  Print, Pop,
   Return,
 }
 
@@ -33,12 +39,18 @@ impl Debug for Ins {
       Negate => write!(f, "OP_NEG"),
 
       Not => write!(f, "OP_NOT"),
-      Or => write!(f, "OP_OR"),
-      And => write!(f, "OP_AND"),
+      // Or => write!(f, "OP_OR"),
+      // And => write!(f, "OP_AND"),
       Equal => write!(f, "OP_EQUAL"),
       Greater => write!(f, "OP_GREATER"),
       Less => write!(f, "OP_LESS"),
 
+      DefGlobal(var) => write!(f, "{:PAD$}{var}", "OP_DEF_GLOB"),
+      GetGlobal(var) => write!(f, "{:PAD$}{var}", "OP_GET_GLOB"),
+      SetGlobal(var) => write!(f, "{:PAD$}{var}", "OP_SET_GLOB"),
+
+      Print => write!(f, "OP_PRINT"),
+      Pop => write!(f, "OP_POP"),
       Return => write!(f, "OP_RETURN"),
     }
   }
