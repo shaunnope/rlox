@@ -9,7 +9,7 @@ use crate::{
     Value
   }, 
   compiler::compile,
-  gc::mman::MemManager,
+  gc::mmap::MemManager,
   vm::error::RuntimeError
 };
 
@@ -91,7 +91,9 @@ impl VM {
             (Object(a), b) if a.is_type(L::String("".into()))
             => {
               let L::String(a) = &*a;
-              Object(Rc::new(L::String(a.to_owned() + &b.to_string())))
+              // Object(Rc::new(L::String(a.to_owned() + &b.to_string())));
+              let obj = self.objects.add_string(&(a.to_owned() + &b.to_string()));
+              Object(obj)
             },
             (a, b) => return Err(RuntimeError::UnsupportedType {
               level: ErrorLevel::Error,
@@ -148,9 +150,9 @@ impl VM {
 
   /// Push value onto stack
   fn push(&mut self, value: Value) {
-    if let Value::Object(obj) = &value {
-      self.objects.push(obj);
-    }
+    // if let Value::Object(obj) = &value {
+    //   self.objects.push(obj);
+    // }
     self.stack.push(value);
   }
 

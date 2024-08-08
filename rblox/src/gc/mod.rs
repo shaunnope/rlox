@@ -1,2 +1,2 @@
 
-pub mod mman;
+pub mod mmap;

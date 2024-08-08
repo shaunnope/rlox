@@ -1,7 +1,7 @@
-use std::{fmt::Display, mem};
+use std::{fmt::Display, hash::Hash, mem};
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LoxObject {
   String(String),
 }
