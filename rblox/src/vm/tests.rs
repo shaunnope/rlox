@@ -6,7 +6,7 @@ use crate::common::Span;
 mod challenges;
 
 #[cfg(test)]
-mod globals;
+mod variables;
 
 #[test]
 fn correct_arith() {
