@@ -8,7 +8,7 @@ use super::Span;
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum ErrorLevel {
   _Info,
-  _Warning,
+  Warning,
   Error
 }
 
@@ -17,14 +17,14 @@ impl Debug for ErrorLevel {
     use ErrorLevel::*;
     match self {
       _Info => write!(f, "INFO"),
-      _Warning => write!(f, "WARNING"),
+      Warning => write!(f, "WARNING"),
       Error => write!(f, "ERROR"),
     }
   }
 }
 
 pub enum ErrorType {
-  Error,
+  _Error,
   CompileError,
   RuntimeError,
 }
@@ -33,7 +33,7 @@ impl Debug for ErrorType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       use ErrorType::*;
       match self {
-        Error => write!(f, "Error"),
+        _Error => write!(f, "Error"),
         CompileError => write!(f, "Compile Error"),
         RuntimeError => write!(f, "Runtime Error"),
       }

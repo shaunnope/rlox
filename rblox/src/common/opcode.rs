@@ -18,7 +18,10 @@ pub enum Ins {
   GetGlobal(String),
   SetGlobal(String),
 
-  Print, Pop,
+  GetLocal(usize),
+  SetLocal(usize),
+
+  Print, Pop, PopN(usize),
   Return,
 }
 
@@ -49,8 +52,12 @@ impl Debug for Ins {
       GetGlobal(var) => write!(f, "{:PAD$}{var}", "OP_GET_GLOB"),
       SetGlobal(var) => write!(f, "{:PAD$}{var}", "OP_SET_GLOB"),
 
+      GetLocal(var) => write!(f, "{:PAD$}{var}", "OP_GET_LOC"),
+      SetLocal(var) => write!(f, "{:PAD$}{var}", "OP_SET_LOC"),
+
       Print => write!(f, "OP_PRINT"),
       Pop => write!(f, "OP_POP"),
+      PopN(n) => write!(f, "{:PAD$}{n}", "OP_POPN"),
       Return => write!(f, "OP_RETURN"),
     }
   }

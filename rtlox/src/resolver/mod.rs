@@ -5,7 +5,7 @@ use std::{
 use crate::{
   ast::{
     expr::{self, Expr},
-    stmt::{self, ClassDecl, Stmt},
+    stmt::{self, Stmt},
   },
   data::LoxIdent,
   interpreter::Interpreter,

@@ -40,7 +40,7 @@ impl Span {
   }
 
   /// Return the span range.
-  pub fn range(&self) -> Range<usize> {
+  pub fn _range(&self) -> Range<usize> {
     Range {
       start: self.0,
       end: self.1,

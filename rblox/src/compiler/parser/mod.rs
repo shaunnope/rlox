@@ -7,7 +7,7 @@ use rules::ParseFn;
 
 use crate::{
   common::{
-    data::LoxObject, error::ErrorLevel, Chunk, Ins, Span, Value
+    data::LoxObject, error::{ErrorLevel, LoxError}, Chunk, Ins, Span
   },
   compiler::{
     parser::{
@@ -18,17 +18,17 @@ use crate::{
     scanner::{
       token::{Token, TokenType}, Scanner
     },
-  }, vm::error::RuntimeError
+  }
 };
 
-use super::emit;
+use super::{emit, Compiler};
 
 pub mod error;
 pub mod state;
 pub mod rules;
 
 /// Parse result
-type PResult<T> = Result<T, ParseError>;
+pub type PResult<T> = Result<T, ParseError>;
 
 pub type ParserOutcome = (Vec<Chunk>, Vec<ParseError>);
 
@@ -40,6 +40,7 @@ pub struct Parser<'src> {
   chunks: Vec<Chunk>,
   diagnostics: Vec<ParseError>,
   pub _options: ParserOptions,
+  compiler: Compiler
 }
 
 impl Parser<'_> {
@@ -72,7 +73,16 @@ impl Parser<'_> {
   fn var_decl(&mut self) -> PResult<()> {
     use TokenType::*;
     let var_span = self.consume(Var, S_MUST)?.span;
-    let (global, ident_span) = self.consume_ident("Expected variable name")?;
+    let (ident, ident_span) = self.consume_ident("Expected variable name")?;
+
+    if let Err(err) = self.compiler.declare_variable(&ident, ident_span) {
+      if err.get_level() > ErrorLevel::Warning {
+        return Err(err)
+      } else {
+        err.report()
+      }
+    };
+
 
     match self.current_token.kind {
       Equal => {
@@ -84,13 +94,17 @@ impl Parser<'_> {
 
     let semicolon = self.consume(Semicolon, "Expected `;` after variable declaration")?.span;
 
-    self.define_var(global, var_span.to(semicolon));
+    self.define_var(ident, var_span.to(semicolon));
 
     Ok(())
   }
 
   fn define_var(&mut self, var: LoxObject, span: Span) {
     if let LoxObject::Identifier(name) = var {
+      if self.compiler.scope_depth > 0 {
+        self.compiler.mark_init();
+        return
+      }
       emit(Ins::DefGlobal(name), span, self.current_chunk());
     } else {
       unreachable!()
@@ -104,9 +118,30 @@ impl Parser<'_> {
   fn statement(&mut self) -> PResult<()> {
     use TokenType::*;
     match &self.current_token.kind {
+      LeftBrace => {
+        self.compiler.begin_scope();
+        let span = self.parse_block()?;
+        self.end_scope(span);
+        Ok(())
+      },
       Print => self.parse_print(),
       _ => self.expression()
     }
+  }
+
+  fn parse_block(&mut self) -> PResult<Span> {
+    let (_, span) = self.paired_spanned(
+      TokenType::LeftBrace, 
+      "Expected block to be opened", 
+      "Expected block to be closed", 
+      |this| {
+        while !this.is(TokenType::RightBrace) && !this.is_at_end() {
+          this.declaration();
+        }
+        Ok(())
+      },
+    )?;
+    Ok(span)
   }
 
   /// Parse a print statement.
@@ -182,11 +217,13 @@ impl Parser<'_> {
 
   fn parse_variable(&mut self, can_assign: bool) -> PResult<()> {
     match &self.prev_token.kind {
-      TokenType::Identifier(name) => self.named_variable(
-        name.to_owned(), 
-        self.prev_token.span,
-        can_assign
-      )?,
+      TokenType::Identifier(name) => {
+        self.named_variable(
+          name.to_owned(), 
+          self.prev_token.span,
+          can_assign
+        )?
+      },
 
       _ => return Err(ParseError::UnexpectedToken { 
         message: "Expected identifier".into(), 
@@ -198,12 +235,20 @@ impl Parser<'_> {
   }
 
   fn named_variable(&mut self, name: impl Into<String>, span: Span, can_assign: bool) -> PResult<()> {
-    
+    let name = name.into();
+    let arg = self.compiler.resolve_local(&name)?;
+
     let ins = if can_assign && self.take(TokenType::Equal) {
       self.parse_expr()?;
-      Ins::SetGlobal(name.into())
+      match arg {
+        Some(n) => Ins::SetLocal(n),
+        None => Ins::SetGlobal(name)
+      }
     } else {
-      Ins::GetGlobal(name.into())
+      match arg {
+        Some(n) => Ins::GetLocal(n),
+        None => Ins::GetGlobal(name)
+      }
     };
     
     emit(ins, span, self.current_chunk());
@@ -321,9 +366,9 @@ impl Parser<'_> {
 // The parser helper methods.
 impl<'src> Parser<'src> {
   /// Creates a new parser.
-  pub fn new(src: &'src str) -> Self {
+  pub fn new(src: &'src str, compiler: Compiler) -> Self {
     let mut chunks = Vec::new();
-    chunks.push(Chunk::new("chunk 0"));
+    chunks.push(Chunk::new("main"));
     let mut parser = Self {
       scanner: Scanner::new(src),
       current_token: Token::dummy(),
@@ -332,6 +377,7 @@ impl<'src> Parser<'src> {
       chunks,
       diagnostics: Vec::new(),
       _options: ParserOptions::default(),
+      compiler
     };
     parser.advance(); // The first advancement.
     parser
@@ -409,7 +455,7 @@ impl<'src> Parser<'src> {
   }
 
   /// Pair invariant.
-  fn paired<I, R>(
+  fn _paired<I, R>(
     &mut self,
     delim_start: TokenType,
     delim_start_expectation: impl Into<String>,
@@ -488,7 +534,12 @@ impl<'src> Parser<'src> {
   fn is_at_end(&self) -> bool {
     self.current_token.kind == TokenType::EOF
   }
-  
+
+  fn end_scope(&mut self, span: Span) {
+    let count = self.compiler.end_scope();
+    emit(Ins::PopN(count), span, self.current_chunk())
+  }
+
 }
 
 /// (String Must) Indicates the parser to emit a parser error (i.e. the parser is bugged) message.

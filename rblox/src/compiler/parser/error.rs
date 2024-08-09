@@ -71,7 +71,10 @@ impl Error for ParseError {}
 
 impl LoxError for ParseError {
   fn get_level(&self) -> ErrorLevel {
-    ErrorLevel::Error
+    match self {
+      Self::Error { level, ..} => level.clone(),
+      _ => ErrorLevel::Error
+    }
   }
 
   fn get_type(&self) -> ErrorType {

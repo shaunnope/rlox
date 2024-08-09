@@ -18,11 +18,11 @@ impl MemManager {
 
   pub fn _alloc_obj(&mut self, obj: LoxObject) -> Rc<LoxObject> {
     let obj = Rc::new(obj);
-    self.push(&obj);
+    self._push(&obj);
     obj
   }
 
-  pub fn push(&mut self, obj: &Rc<LoxObject>) {
+  pub fn _push(&mut self, obj: &Rc<LoxObject>) {
     self.objects.push(obj.clone());
   }
 

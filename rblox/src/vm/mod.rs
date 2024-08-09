@@ -46,7 +46,7 @@ impl VM {
     match self.interpret(chunk) {
       Err(err) => {
         err.report();
-        Err(ErrorType::CompileError)
+        Err(ErrorType::RuntimeError)
       },
       Ok(_) => Ok(())
     }
@@ -135,6 +135,11 @@ impl VM {
           println!("{}", self.pop())
         }
         Pop => { self.pop(); },
+        PopN(n) => { 
+          for _ in 0..*n {
+            self.pop(); 
+          }
+        },
 
         DefGlobal(name) => {
           let val = self.peek(0).unwrap().to_owned();
@@ -162,6 +167,11 @@ impl VM {
 
           let val = self.peek(0).unwrap().to_owned();
           self.globals.insert(name.into(), val);
+        }
+
+        GetLocal(slot) => self.push(self.stack[*slot].clone()),
+        SetLocal(slot) => {
+          self.stack[*slot] = self.peek(0).unwrap().clone()
         }
 
         Return => {},
@@ -205,13 +215,13 @@ impl VM {
   }
 }
 
+#[allow(dead_code)]
 fn display_instr(stack: &[Value], inst: &Ins) {
   print!("[ ");
   for slot in stack.iter() {
     print!("{slot:?}, ");
   }
   println!("]\n{:?}", inst);
-
 }
 
 macro_rules! bin_num_op {

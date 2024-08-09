@@ -10,7 +10,7 @@ fn challenge_1_1() {
   chunk.write(Ins::Constant(Value::Number(3.0)), Span::dummy(2));
   chunk.write(Ins::Add, Span::dummy(3));
   chunk.write(Ins::Return, Span::dummy(3));
-  vm.interpret(chunk);
+  let _ = vm.interpret(chunk);
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn challenge_1_2() {
   chunk.write(Ins::Multiply, Span::dummy(2));
   chunk.write(Ins::Add, Span::dummy(3));
   chunk.write(Ins::Return, Span::dummy(3));
-  vm.interpret(chunk);
+  let _ = vm.interpret(chunk);
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn challenge_1_3() {
   chunk.write(Ins::Constant(Value::Number(1.0)), Span::dummy(2));
   chunk.write(Ins::Subtract, Span::dummy(3));
   chunk.write(Ins::Return, Span::dummy(3));
-  vm.interpret(chunk);
+  let _ = vm.interpret(chunk);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn challenge_1_4() {
   chunk.write(Ins::Divide, Span::dummy(2));
   chunk.write(Ins::Subtract, Span::dummy(3));
   chunk.write(Ins::Return, Span::dummy(3));
-  vm.interpret(chunk);
+  let _ = vm.interpret(chunk);
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn challenge_2_1() {
   chunk.write(Ins::Multiply, Span::dummy(2));
   chunk.write(Ins::Subtract, Span::dummy(2));
   chunk.write(Ins::Return, Span::dummy(3));
-  vm.interpret(chunk);
+  let _ = vm.interpret(chunk);
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn challenge_2_2() {
   chunk.write(Ins::Negate, Span::dummy(2));
   chunk.write(Ins::Add, Span::dummy(2));
   chunk.write(Ins::Return, Span::dummy(3));
-  vm.interpret(chunk);
+  let _ = vm.interpret(chunk);
 }
 
 #[test]

@@ -27,7 +27,7 @@ comment */
 /* inline block*/
 forest varied\0";
 
-  let mut parser = Parser::new(source);
+  let mut parser = Parser::new(source, Compiler::new());
 
   assert_eq!(parser.advance(), &Token::new(TokenType::LeftParen, Span::new(0, 1, 1)));
   assert_eq!(parser.advance(), &Token::new(TokenType::RightParen, Span::new(2, 3, 1)));
