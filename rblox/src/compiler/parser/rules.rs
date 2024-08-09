@@ -4,6 +4,7 @@ use crate::compiler::scanner::token::TokenType;
   #[derive(Debug, Clone, PartialEq, PartialOrd)]
   pub enum Precedence {
     None,
+    Sequence,
     Assignment,
     Or,
     And,
@@ -20,16 +21,17 @@ use crate::compiler::scanner::token::TokenType;
     fn from(value: usize) -> Self {
       use Precedence::*;
       match value {
-        1 => Assignment,
-        2 => Or,
-        3 => And,
-        4 => Equality,
-        5 => Comparision,
-        6 => Term,
-        7 => Factor,
-        8 => Unary,
-        9 => Call,
-        10 => Primary,
+        1 => Sequence,
+        2 => Assignment,
+        3 => Or,
+        4 => And,
+        5 => Equality,
+        6 => Comparision,
+        7 => Term,
+        8 => Factor,
+        9 => Unary,
+        10 => Call,
+        11 => Primary,
         _ => None
       }
     }
@@ -85,6 +87,8 @@ impl From<&TokenType> for ParseRule {
       T::True | T::False | T::Nil => Self(F::Literal, F::None, P::None),
       T::String(_) => Self(F::String, F::None, P::None),
       T::Identifier(_) => Self(F::Variable, F::None, P::None),
+
+      T::Comma => Self(F::None, F::Binary, P::Sequence),
 
       _ => Self(F::None, F::None, P::None),
     }

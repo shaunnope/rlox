@@ -61,6 +61,7 @@ pub enum TokenType {
   True,
   Var,
   While,
+  Break, Continue,
 
   EOF,
 
@@ -111,6 +112,8 @@ impl From<&str> for TokenType {
       "fun" => Fun,
       "for" => For,
       "while" => While,
+      "break" => Break,
+      "continue" => Continue,
       "var" => Var,
       "print" => Print,
       // "typeof" => Typeof,
@@ -152,6 +155,8 @@ impl Display for TokenType {
 
       // keywords
       And => f.write_str("and"),
+      Break => f.write_str("break"),
+      Continue => f.write_str("continue"),
       Class => f.write_str("class"),
       Else => f.write_str("else"),
       False => f.write_str("false"),

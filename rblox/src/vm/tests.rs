@@ -2,11 +2,9 @@ use super::*;
 
 use crate::common::Span;
 
-#[cfg(test)]
 mod challenges;
-
-#[cfg(test)]
 mod variables;
+mod sequence;
 
 #[test]
 fn correct_arith() {

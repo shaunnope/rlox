@@ -308,7 +308,7 @@ impl Parser<'_> {
 
   /// Parse an expression
   fn parse_expr(&mut self) -> PResult<Span> {
-    self.parse_precedence(Precedence::Assignment)
+    self.parse_precedence(Precedence::Sequence)
   }
 
   fn parse_number(&mut self) -> PResult<()> {
@@ -378,7 +378,7 @@ impl Parser<'_> {
     let arg = self.compiler.resolve_local(&name)?;
 
     let ins = if can_assign && self.take(TokenType::Equal) {
-      self.parse_expr()?;
+      self.parse_precedence(Precedence::Assignment)?;
       match arg {
         Some(n) => Ins::SetLocal(n),
         None => Ins::SetGlobal(name)
@@ -417,7 +417,7 @@ impl Parser<'_> {
     let end_span = self.spanned(
       |this| this.parse_precedence(Precedence::Or)
     )?;
-    patch_jump(end_jmp, end_span, self.current_chunk());
+    patch_jump(end_jmp, end_span, self.current_chunk())?;
 
     Ok(())
   }
@@ -443,14 +443,18 @@ impl Parser<'_> {
     Ok(())
   }
 
-  fn parse_binary(&mut self) -> PResult<()> {
+  fn parse_binary(&mut self, can_seq: bool) -> PResult<()> {
+    use TokenType::*;
     let op = self.prev_token.clone();
 
     let rule = ParseRule::from(&op.kind);
+    if can_seq && op.kind == Comma {
+      return Ok(())
+    }
     self.parse_precedence(rule.2.update(1))?;
-
-    use TokenType::*;
+    
     match op.kind {
+      Comma => unreachable!(),
       Plus => emit(Ins::Add, op.span, self.current_chunk()),
       Minus => emit(Ins::Subtract, op.span, self.current_chunk()),
       Star => emit(Ins::Multiply, op.span, self.current_chunk()),
@@ -484,10 +488,9 @@ impl Parser<'_> {
     let start = prev.span;
 
     // prefix parser
-    let can_assign = prec <= Precedence::Assignment;
     self.parse_rule(
       &rule.0, 
-      can_assign,
+      &prec,
       Err(ParseError::UnexpectedToken { 
       message: "Expected expression".into(), offending: prev, expected: None 
     }))?;
@@ -497,12 +500,12 @@ impl Parser<'_> {
     while prec <= other.2 {
       let prev = self.advance();
       let infix = ParseRule::from(&prev.kind).1;
-      self.parse_rule(&infix, can_assign, Ok(()))?;
+      self.parse_rule(&infix, &prec, Ok(()))?;
 
       other = ParseRule::from(&self.current_token.kind);
     }
 
-    if can_assign && self.is(TokenType::Equal) {
+    if prec <= Precedence::Assignment && self.is(TokenType::Equal) {
       return Err(ParseError::Error { 
         message: "Invalid assignment target".into(), 
         span: self.current_token.span, 
@@ -510,20 +513,25 @@ impl Parser<'_> {
       })
     };
 
+    if prec <= Precedence::Sequence && self.prev_token.kind == TokenType::Comma {
+      emit(Ins::Pop, self.prev_token.span, self.current_chunk());
+      self.parse_expr()?;
+    }
+
     Ok(start.to(self.current_token.span))
   }
 
-  /// Parse based on 
-  fn parse_rule(&mut self, rule: &ParseFn, can_assign: bool, none_return: PResult<()>) -> PResult<()> {
+  /// Parse according to given rule.
+  fn parse_rule(&mut self, rule: &ParseFn, prec: &Precedence, none_return: PResult<()>) -> PResult<()> {
     use ParseFn as F;
     match rule {
       F::Group => self.parse_group(),
-      F::Binary => self.parse_binary(),
+      F::Binary => self.parse_binary(*prec <= Precedence::Sequence),
       F::Unary => self.parse_unary(),
       F::Number => self.parse_number(),
       F::Literal => self.parse_literal(),
       F::String => self.parse_string(),
-      F::Variable => self.parse_variable(can_assign),
+      F::Variable => self.parse_variable(*prec <= Precedence::Assignment),
       F::And => self.parse_and(),
       F::Or => self.parse_or(),
       F::None => none_return
