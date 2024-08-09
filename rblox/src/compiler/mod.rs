@@ -23,8 +23,50 @@ pub fn compile(src: &str) -> ParserOutcome {
   parser.parse()
 }
 
-pub fn emit(ins: Ins, span: Span, chunk: &mut Chunk) {
+pub fn emit(ins: Ins, span: Span, chunk: &mut Chunk) -> usize {
   chunk.write(ins, span);
+  chunk.len() - 1
+}
+
+pub fn patch_jump(offset: usize, span: Span, chunk: &mut Chunk) -> PResult<()> {
+  assert!(offset <= chunk.len());
+  let jump = chunk.len() - offset - 1;
+  if jump as u16 > std::u16::MAX {
+    return Err(ParseError::InvalidJump { 
+      message: "Too much code to jump over".into(), 
+      span 
+    })
+  }
+
+  let ins = match chunk.get(offset).unwrap() {
+    (Ins::Jump(_), _) => Ins::Jump(jump as isize),
+    (Ins::JumpIfFalse(_), _) => Ins::JumpIfFalse(jump as isize),
+    (unexpected, span) => return Err(ParseError::InvalidJump { 
+      message: format!("Not a jump instruction. Got {unexpected:?}"),
+      span: *span
+    })
+  };
+  chunk.code[offset] = ins;
+  Ok(())
+}
+
+pub fn emit_loop(start: usize, span: Span, chunk: &mut Chunk) -> PResult<usize> {
+  if start >= chunk.len() {
+    return Err(ParseError::InvalidJump { 
+      message: "Cannot jump ahead when looping".into(),
+      span
+    })
+  };
+
+  let offset = chunk.len() + 1 - start;
+  if offset as u16 > std::u16::MAX {
+    return Err(ParseError::InvalidJump { 
+      message: "Loop body too large".into(), 
+      span 
+    })
+  }
+
+  Ok(emit(Ins::Jump(-(offset as isize)), span, chunk))
 }
 
 pub struct Compiler {

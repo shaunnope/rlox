@@ -54,7 +54,10 @@ impl VM {
   pub fn interpret(&mut self, chunk: Chunk) -> LoxResult<RuntimeError> {
     use Ins::*;
     use Value as V;
-    for (inst, span ) in chunk.iter_zip() {
+    let mut ip = 0;
+    while ip < chunk.len() {
+      let (inst, span) = chunk.get(ip).unwrap();
+      ip += 1;
       // if cfg!(debug_assertions) {
       //   display_instr(&self.stack, &inst);
       // }
@@ -174,9 +177,19 @@ impl VM {
           self.stack[*slot] = self.peek(0).unwrap().clone()
         }
 
+        Jump(offset) => {
+          ip = ((ip as isize) + offset) as usize;
+        }
+        JumpIfFalse(offset) => {
+          if !self.peek(0).unwrap().truth() {
+            ip = ((ip as isize) + offset) as usize;
+          }
+        }
+
         Return => {},
         // _ => {}
       }
+      
     }
     Ok(())
   }
@@ -215,7 +228,7 @@ impl VM {
   }
 }
 
-#[allow(dead_code)]
+// #[allow(dead_code)]
 fn display_instr(stack: &[Value], inst: &Ins) {
   print!("[ ");
   for slot in stack.iter() {

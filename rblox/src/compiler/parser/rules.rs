@@ -50,7 +50,8 @@ pub enum ParseFn {
   Number,
   Literal,
   String,
-  Variable
+  Variable,
+  And, Or
 }
 
 pub struct ParseRule(pub ParseFn, pub ParseFn, pub Precedence);
@@ -76,6 +77,9 @@ impl From<&TokenType> for ParseRule {
       T::Greater | T::GreaterEqual |
       T::Less | T::LessEqual 
       => Self(F::None, F::Binary, P::Comparision),
+
+      T::And => Self(F::None, F::And, Precedence::And),
+      T::Or => Self(F::None, F::Or, Precedence::Or),
 
       T::Number(_) => Self(F::Number, F::None, P::None),
       T::True | T::False | T::Nil => Self(F::Literal, F::None, P::None),

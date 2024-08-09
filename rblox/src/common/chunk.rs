@@ -28,6 +28,13 @@ impl Chunk {
     self.spans.push(span);
   }
 
+  pub fn get(&self, offset: usize) -> Option<(&Ins, &Span)> {
+    if offset >= self.len() {
+      return None
+    }
+    Some((&self.code[offset], &self.spans[offset]))
+  }
+
   // /// Get the line of an instruction from the stored run-length encoding
   // fn _get_line(&self, idx: usize) -> u32 {
   //   // Should never panic since only valid indices should be passed into this function
@@ -37,8 +44,12 @@ impl Chunk {
   //   self.lines[line].1
   // }
 
-  pub fn iter_zip(&self) -> Zip<Iter<Ins>, Iter<Span>> {
+  pub fn _iter_zip(&self) -> Zip<Iter<Ins>, Iter<Span>> {
     self.code.iter().zip(self.spans.iter())
+  }
+
+  pub fn len(&self) -> usize {
+    self.code.len()
   }
 
 }

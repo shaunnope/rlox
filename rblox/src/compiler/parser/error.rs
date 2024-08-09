@@ -33,6 +33,11 @@ pub enum ParseError {
     expected: Option<TokenType>,
   },
 
+  InvalidJump { 
+    message: String,
+    span: Span 
+  },
+
   DetectedLambda,
 }
 
@@ -62,6 +67,8 @@ impl Display for ParseError {
         Ok(())
       }
 
+      InvalidJump { message, span } => write!(f, "illegal jump - {message}; at position {span}"),
+
       DetectedLambda => unreachable!(),
     }
   }
@@ -82,12 +89,7 @@ impl LoxError for ParseError {
   }
 
   fn get_span(&self) -> Span {
-    use ParseError::*;
-      match self {
-        Error {span, ..} | ScanError {span, ..} => *span,
-        UnexpectedToken {offending, ..} => offending.span,
-        DetectedLambda => Span::new(0, 0, 0),
-      }
+    self.primary_span()
   }
 }
 
@@ -96,7 +98,8 @@ impl ParseError {
   pub fn primary_span(&self) -> Span {
     use ParseError::*;
     match self {
-      Error { span, .. } | ScanError { span, .. } => *span,
+      Error { span, .. } | ScanError { span, .. } | InvalidJump { span, ..}
+      => *span,
       UnexpectedToken { offending, .. } => offending.span,
       DetectedLambda => unreachable!(),
     }

@@ -11,7 +11,7 @@ pub enum Ins {
   Add, Subtract, Multiply, Divide,
   Negate,
 
-  Not, // Or, And, 
+  Not,
   Equal, Greater, Less,
 
   DefGlobal(String),
@@ -20,6 +20,10 @@ pub enum Ins {
 
   GetLocal(usize),
   SetLocal(usize),
+
+  Jump(isize),
+  JumpIfFalse(isize),
+  // Loop(usize),
 
   Print, Pop, PopN(usize),
   Return,
@@ -42,8 +46,6 @@ impl Debug for Ins {
       Negate => write!(f, "OP_NEG"),
 
       Not => write!(f, "OP_NOT"),
-      // Or => write!(f, "OP_OR"),
-      // And => write!(f, "OP_AND"),
       Equal => write!(f, "OP_EQUAL"),
       Greater => write!(f, "OP_GREATER"),
       Less => write!(f, "OP_LESS"),
@@ -54,6 +56,10 @@ impl Debug for Ins {
 
       GetLocal(var) => write!(f, "{:PAD$}{var}", "OP_GET_LOC"),
       SetLocal(var) => write!(f, "{:PAD$}{var}", "OP_SET_LOC"),
+
+      Jump(n) => write!(f, "{:PAD$}{n}", "OP_JMP"),
+      JumpIfFalse(n) => write!(f, "{:PAD$}{n}", "OP_JMPF"),
+      // Loop(n) => write!(f, "{:PAD$}{n}", "OP_LOOP"),
 
       Print => write!(f, "OP_PRINT"),
       Pop => write!(f, "OP_POP"),

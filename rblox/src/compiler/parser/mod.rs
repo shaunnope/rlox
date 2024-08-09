@@ -10,18 +10,20 @@ use crate::{
     data::LoxObject, error::{ErrorLevel, LoxError}, Chunk, Ins, Span
   },
   compiler::{
+    Compiler,
+    emit,
+    emit_loop, 
     parser::{
       error::ParseError,
       rules::{ParseRule, Precedence},
       state::ParserOptions
-    },
+    }, 
+    patch_jump, 
     scanner::{
       token::{Token, TokenType}, Scanner
-    },
+    }
   }
 };
-
-use super::{emit, Compiler};
 
 pub mod error;
 pub mod state;
@@ -89,8 +91,10 @@ impl Parser<'_> {
         self.advance();
         self.parse_expr()?;
       },
-      _ => emit(Ins::Nil, ident_span, self.current_chunk())
-    }
+      _ => {
+        emit(Ins::Nil, ident_span, self.current_chunk());
+      }
+    };
 
     let semicolon = self.consume(Semicolon, "Expected `;` after variable declaration")?.span;
 
@@ -124,11 +128,15 @@ impl Parser<'_> {
         self.end_scope(span);
         Ok(())
       },
+      If => self.parse_if_stmt(),
+      While => self.parse_while(),
+      For => self.parse_for(),
       Print => self.parse_print(),
       _ => self.expression()
     }
   }
 
+  /// Parse a block scope
   fn parse_block(&mut self) -> PResult<Span> {
     let (_, span) = self.paired_spanned(
       TokenType::LeftBrace, 
@@ -142,6 +150,136 @@ impl Parser<'_> {
       },
     )?;
     Ok(span)
+  }
+
+  /// Parse an if statement
+  fn parse_if_stmt(&mut self) -> PResult<()> {
+    use TokenType::*;
+    let if_span = self.consume(If, S_MUST)?.span;
+    let (_, cond_span) = self.paired_spanned(
+      TokenType::LeftParen,
+      "Expected `(` after `if`.",
+      "Expected `)` after condition.",
+      |this| this.parse_expr(),
+    )?;
+
+    let then_jmp = emit(Ins::JumpIfFalse(-1), if_span.to(cond_span), self.current_chunk());
+    emit(Ins::Pop, cond_span, self.current_chunk());
+    
+    let then_span = self.spanned(
+      |this| this.statement()
+    )?;
+
+    let else_jmp = emit(Ins::Jump(-1), self.prev_token.span, self.current_chunk());
+
+    patch_jump(then_jmp, then_span, self.current_chunk())?;
+    emit(Ins::Pop, self.prev_token.span, self.current_chunk());
+
+    let else_span = if self.take(Else) {
+      self.spanned(
+        |this| this.statement()
+      )?
+    } else {
+      self.prev_token.span
+    };
+
+    patch_jump(else_jmp, else_span, self.current_chunk())?;
+
+    Ok(())
+  }
+
+  /// Parse a while statement
+  fn parse_while(&mut self) -> PResult<()> {
+    use TokenType::*;
+    let loop_start = self.current_chunk().len();
+    let while_span = self.consume(While, S_MUST)?.span;
+
+    let (_, cond_span) = self.paired_spanned(
+      TokenType::LeftParen,
+      "Expected `(` after `while`.",
+      "Expected `)` after condition.",
+      |this| this.parse_expr(),
+    )?;
+
+    let exit_jmp = emit(Ins::JumpIfFalse(-1), while_span.to(cond_span), self.current_chunk());
+    emit(Ins::Pop, cond_span, self.current_chunk());
+    let span = self.spanned(
+      |this| this.statement()
+    )?;
+    emit_loop(loop_start, span, self.current_chunk())?;
+
+    patch_jump(exit_jmp, span, self.current_chunk())?;
+    emit(Ins::Pop, span, self.current_chunk());
+    Ok(())
+  }
+
+  /// Parse a for statement
+  fn parse_for(&mut self) -> PResult<()> {
+    self.compiler.begin_scope();
+    use TokenType::*;
+    let for_span = self.consume(For, S_MUST)?.span;
+
+    let (loop_start, exit_jmp) = self.paired(
+      LeftParen,
+      "Expected `(` after `for`",
+      "Expected `)` to close `for` group",
+      |this| {
+        // initializer
+        match this.current_token.kind {
+          Semicolon => {
+            this.advance();
+          },
+          Var => this.var_decl()?,
+          _ => this.expression()?
+        };
+
+        let mut loop_start = this.current_chunk().len();
+
+        // condition
+        let exit_jmp = match this.current_token.kind {
+          Semicolon => None,
+          _ => {
+            let span = this.parse_expr()?;
+
+            let jmp = emit(Ins::JumpIfFalse(-1), span, this.current_chunk());
+            emit(Ins::Pop, span, this.current_chunk());
+            Some((jmp, span))
+          },
+        };
+        this.consume(Semicolon, "Expected `;` after `for` condition")?;
+
+        // incrementer
+        match this.current_token.kind {
+          RightParen => {},
+          _ => {
+            let body_jmp = emit(Ins::Jump(-1), this.current_token.span, this.current_chunk());
+            let inc_start = this.current_chunk().len();
+            let inc_span = this.parse_expr()?;
+            emit(Ins::Pop, inc_span, this.current_chunk());
+
+            emit_loop(loop_start, inc_span, this.current_chunk())?;
+            loop_start = inc_start;
+            patch_jump(body_jmp, inc_span, this.current_chunk())?;
+          },
+        };
+
+        Ok((loop_start, exit_jmp))
+      },
+    )?;
+
+    self.statement()?;
+    emit_loop(
+      loop_start, 
+      for_span.to(self.current_token.span), 
+      self.current_chunk()
+    )?;
+    if let Some((offset, span)) = exit_jmp {
+      patch_jump(offset, span, self.current_chunk())?;
+      emit(Ins::Pop, span, self.current_chunk());
+    }
+
+    self.compiler.end_scope();
+    Ok(())
   }
 
   /// Parse a print statement.
@@ -168,6 +306,7 @@ impl Parser<'_> {
     Ok(())
   }
 
+  /// Parse an expression
   fn parse_expr(&mut self) -> PResult<Span> {
     self.parse_precedence(Precedence::Assignment)
   }
@@ -255,6 +394,34 @@ impl Parser<'_> {
     Ok(())
   }
 
+  fn parse_and(&mut self) -> PResult<()> {
+    let span = self.prev_token.span;
+    let end_jmp = emit(Ins::JumpIfFalse(-1), span, self.current_chunk());
+    emit(Ins::Pop, span, self.current_chunk());
+
+    let end_span = self.spanned(
+      |this| this.parse_precedence(Precedence::And)
+    )?;
+    patch_jump(end_jmp, end_span, self.current_chunk())?;
+    
+    Ok(())
+  }
+
+  fn parse_or(&mut self) -> PResult<()> {
+    let span = self.prev_token.span;
+    let else_jmp = emit(Ins::JumpIfFalse(-1), span, self.current_chunk());
+    let end_jmp = emit(Ins::Jump(-1), span, self.current_chunk());
+    patch_jump(else_jmp, span, self.current_chunk())?;
+    emit(Ins::Pop, span, self.current_chunk());
+
+    let end_span = self.spanned(
+      |this| this.parse_precedence(Precedence::Or)
+    )?;
+    patch_jump(end_jmp, end_span, self.current_chunk());
+
+    Ok(())
+  }
+
   fn parse_group(&mut self) -> PResult<()> {
     self.parse_expr()?;
     self.consume(TokenType::RightParen, "Expected `)` after expression")?;
@@ -291,18 +458,18 @@ impl Parser<'_> {
 
       BangEqual => {
         emit(Ins::Equal, op.span, self.current_chunk());
-        emit(Ins::Not, op.span, self.current_chunk());
+        emit(Ins::Not, op.span, self.current_chunk())
       }
       EqualEqual => emit(Ins::Equal, op.span, self.current_chunk()),
       Greater => emit(Ins::Greater, op.span, self.current_chunk()),
       GreaterEqual => {
         emit(Ins::Less, op.span, self.current_chunk());
-        emit(Ins::Not, op.span, self.current_chunk());
+        emit(Ins::Not, op.span, self.current_chunk())
       },
       Less => emit(Ins::Less, op.span, self.current_chunk()),
       LessEqual => {
         emit(Ins::Greater, op.span, self.current_chunk());
-        emit(Ins::Not, op.span, self.current_chunk());
+        emit(Ins::Not, op.span, self.current_chunk())
       },
 
       _ => unreachable!()
@@ -343,7 +510,7 @@ impl Parser<'_> {
       })
     };
 
-    Ok(start)
+    Ok(start.to(self.current_token.span))
   }
 
   /// Parse based on 
@@ -357,6 +524,8 @@ impl Parser<'_> {
       F::Literal => self.parse_literal(),
       F::String => self.parse_string(),
       F::Variable => self.parse_variable(can_assign),
+      F::And => self.parse_and(),
+      F::Or => self.parse_or(),
       F::None => none_return
     }
   }
@@ -454,8 +623,20 @@ impl<'src> Parser<'src> {
     }
   }
 
+  /// Get span of parsed section
+  fn spanned<I, R>(
+    &mut self,
+    inner: I
+  ) -> PResult<Span> 
+  where I: FnOnce(&mut Self) -> PResult<R>,
+  {
+    let start = self.current_token.span;
+    inner(self)?;
+    Ok(start.to(self.prev_token.span))
+  }
+
   /// Pair invariant.
-  fn _paired<I, R>(
+  fn paired<I, R>(
     &mut self,
     delim_start: TokenType,
     delim_start_expectation: impl Into<String>,
@@ -537,29 +718,10 @@ impl<'src> Parser<'src> {
 
   fn end_scope(&mut self, span: Span) {
     let count = self.compiler.end_scope();
-    emit(Ins::PopN(count), span, self.current_chunk())
+    emit(Ins::PopN(count), span, self.current_chunk());
   }
 
 }
 
 /// (String Must) Indicates the parser to emit a parser error (i.e. the parser is bugged) message.
 const S_MUST: &str = "Parser bug. Unexpected token";
-
-// /// Parses a binary expression.
-// macro_rules! bin_expr {
-//   ($self:expr, parse_as = $ast_kind:ident, token_kinds = $( $kind:ident )|+, next_production = $next:ident) => {{
-//     let mut expr = $self.$next()?;
-//     while let $( TokenType::$kind )|+ = $self.current_token.kind {
-//       let operator = $self.advance().clone();
-//       let right = $self.$next()?;
-//       expr = Expr::from(expr::$ast_kind {
-//         span: expr.span().to(right.span()),
-//         left: expr.into(),
-//         operator,
-//         right: right.into(),
-//       });
-//     }
-//     Ok(expr)
-//   }};
-// }
-// use bin_expr;
