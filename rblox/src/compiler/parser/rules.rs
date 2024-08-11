@@ -53,6 +53,7 @@ pub enum ParseFn {
   Literal,
   String,
   Variable,
+  Call,
   And, Or
 }
 
@@ -65,7 +66,7 @@ impl From<&TokenType> for ParseRule {
     use Precedence as P;
     match value {
       T::EOF => Self(F::None, F::None, P::None),
-      T::LeftParen => Self(F::Group, F::None, P::None),
+      T::LeftParen => Self(F::Group, F::Call, P::Call),
 
       T::Minus => Self(F::Unary, F::Binary, P::Term),
       T::Plus => Self(F::None, F::Binary, P::Term),

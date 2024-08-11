@@ -1,27 +1,27 @@
 #[cfg(test)]
 mod tests;
 
-use std::{borrow::Borrow, mem};
+use std::{borrow::Borrow, cell::{RefCell, RefMut}, mem, rc::Rc};
 
 use rules::ParseFn;
 
 use crate::{
   common::{
-    data::LoxObject, error::{ErrorLevel, LoxError}, Chunk, Ins, Span
+    data::LoxObject, 
+    error::{ErrorLevel, LoxError}, 
+    Ins, Span
   },
   compiler::{
-    Compiler,
-    emit,
-    emit_loop, 
     parser::{
       error::ParseError,
       rules::{ParseRule, Precedence},
       state::ParserOptions
     }, 
-    patch_jump, 
     scanner::{
       token::{Token, TokenType}, Scanner
-    }
+    }, 
+    scope::{Module, Push},
+    Compiler, FunctionType
   }
 };
 
@@ -32,23 +32,28 @@ pub mod rules;
 /// Parse result
 pub type PResult<T> = Result<T, ParseError>;
 
-pub type ParserOutcome = (Vec<Chunk>, Vec<ParseError>);
+pub type ParserOutcome = Vec<ParseError>;
 
 pub struct Parser<'src> {
   scanner: Scanner<'src>,
   pub current_token: Token,
   pub prev_token: Token,
   panic_mode: bool,
-  chunks: Vec<Chunk>,
   diagnostics: Vec<ParseError>,
   pub _options: ParserOptions,
-  compiler: Compiler
+  compiler: RefCell<Compiler>,
+  module: Rc<RefCell<Module>>
 }
 
 impl Parser<'_> {
+  const MAX_ARGS: usize = 255;
   pub fn parse(mut self) -> ParserOutcome {
     self.parse_program();
-    (self.chunks, self.diagnostics)
+    self.emit_return();
+
+    let main = self.compiler.into_inner().function;
+    self.module.borrow_mut().push(main);
+    self.diagnostics
   }
 
   fn parse_program(&mut self) {
@@ -61,6 +66,7 @@ impl Parser<'_> {
     use TokenType::*;
     let res = match self.current_token.kind {
       Var => self.var_decl(),
+      Fun => self.fun_decl(),
       _ => self.statement()
     };
     if let Err(err) = res {
@@ -77,7 +83,7 @@ impl Parser<'_> {
     let var_span = self.consume(Var, S_MUST)?.span;
     let (ident, ident_span) = self.consume_ident("Expected variable name")?;
 
-    if let Err(err) = self.compiler.declare_variable(&ident, ident_span) {
+    if let Err(err) = self.current().declare_variable(&ident, ident_span) {
       if err.get_level() > ErrorLevel::Warning {
         return Err(err)
       } else {
@@ -92,7 +98,7 @@ impl Parser<'_> {
         self.parse_expr()?;
       },
       _ => {
-        emit(Ins::Nil, ident_span, self.current_chunk());
+        self.current().emit(Ins::Nil, ident_span);
       }
     };
 
@@ -105,14 +111,74 @@ impl Parser<'_> {
 
   fn define_var(&mut self, var: LoxObject, span: Span) {
     if let LoxObject::Identifier(name) = var {
-      if self.compiler.scope_depth > 0 {
-        self.compiler.mark_init();
+      if self.current().scope_depth > 0 {
+        self.current().mark_init();
         return
       }
-      emit(Ins::DefGlobal(name), span, self.current_chunk());
+      self.current().emit(Ins::DefGlobal(name), span);
     } else {
       unreachable!()
     }
+  }
+
+  fn fun_decl(&mut self) -> PResult<()> {
+    use TokenType::*;
+    let fun_span = self.consume(Fun, S_MUST)?.span;
+    let (ident, ident_span) = self.consume_var("Expected function name")?;
+
+    self.current().mark_init();
+    self.function(ident.data(), FunctionType::Function, fun_span)?;
+    self.define_var(ident, ident_span);
+
+
+    Ok(())
+  }
+
+  /// Parse function params and body
+  fn function(&mut self, name: impl Into<String>, kind: FunctionType, span: Span) -> PResult<()> {
+    let name = name.into();
+    let enclosing = self.compiler.replace(
+      Compiler::build(&name, kind)
+    );
+    // does not have a corresponding `end_scope` because the enclosed compiler
+    // ends after the function body is parsed
+    self.current().begin_scope();
+
+    self.paired(
+      TokenType::LeftParen, 
+      "Expected `(` after function name", 
+      "Expected `)` after parameters", 
+      |this| {
+        if this.is(TokenType::RightParen) {
+          return Ok(())
+        }
+        let start = this.prev_token.span;
+        loop {
+          this.current().function.arity += 1;
+          if this.current().function.arity > Self::MAX_ARGS {
+            return Err(ParseError::Error { 
+              level: ErrorLevel::Error, 
+              message: format!("Can't have more than {} parameters", Self::MAX_ARGS), 
+              span: start.to(this.current_token.span) 
+            })
+          }
+          let (param, span) = this.consume_var("Expected parameter name")?;
+          this.define_var(param, span);
+
+          if !this.take(TokenType::Comma) {
+            break;
+          }
+        }
+        Ok(())
+      },
+    )?;
+    let block_span = self.parse_block()?;
+
+    let func = self.compiler.replace(enclosing).function;
+    let func = self.module.borrow_mut().push(func);
+    self.current().emit(Ins::from(LoxObject::Function(name, func)), span.to(block_span));
+    
+    Ok(())
   }
 
   //
@@ -123,7 +189,7 @@ impl Parser<'_> {
     use TokenType::*;
     match &self.current_token.kind {
       LeftBrace => {
-        self.compiler.begin_scope();
+        self.current().begin_scope();
         let span = self.parse_block()?;
         self.end_scope(span);
         Ok(())
@@ -132,6 +198,7 @@ impl Parser<'_> {
       While => self.parse_while(),
       For => self.parse_for(),
       Print => self.parse_print(),
+      Return => self.parse_return(),
       _ => self.expression()
     }
   }
@@ -163,17 +230,18 @@ impl Parser<'_> {
       |this| this.parse_expr(),
     )?;
 
-    let then_jmp = emit(Ins::JumpIfFalse(-1), if_span.to(cond_span), self.current_chunk());
-    emit(Ins::Pop, cond_span, self.current_chunk());
+    let then_jmp = self.current().emit(Ins::JumpIfFalse(-1), if_span.to(cond_span));
+    self.current().emit(Ins::Pop, cond_span);
     
     let then_span = self.spanned(
       |this| this.statement()
     )?;
 
-    let else_jmp = emit(Ins::Jump(-1), self.prev_token.span, self.current_chunk());
+    let prev_span = self.prev_token.span;
+    let else_jmp = self.current().emit(Ins::Jump(-1), prev_span);
 
-    patch_jump(then_jmp, then_span, self.current_chunk())?;
-    emit(Ins::Pop, self.prev_token.span, self.current_chunk());
+    self.current().patch_jump(then_jmp, then_span)?;
+    self.current().emit(Ins::Pop, prev_span);
 
     let else_span = if self.take(Else) {
       self.spanned(
@@ -183,7 +251,7 @@ impl Parser<'_> {
       self.prev_token.span
     };
 
-    patch_jump(else_jmp, else_span, self.current_chunk())?;
+    self.current().patch_jump(else_jmp, else_span)?;
 
     Ok(())
   }
@@ -191,7 +259,7 @@ impl Parser<'_> {
   /// Parse a while statement
   fn parse_while(&mut self) -> PResult<()> {
     use TokenType::*;
-    let loop_start = self.current_chunk().len();
+    let loop_start = chunk!(self).len();
     let while_span = self.consume(While, S_MUST)?.span;
 
     let (_, cond_span) = self.paired_spanned(
@@ -201,21 +269,21 @@ impl Parser<'_> {
       |this| this.parse_expr(),
     )?;
 
-    let exit_jmp = emit(Ins::JumpIfFalse(-1), while_span.to(cond_span), self.current_chunk());
-    emit(Ins::Pop, cond_span, self.current_chunk());
+    let exit_jmp = self.current().emit(Ins::JumpIfFalse(-1), while_span.to(cond_span));
+    self.current().emit(Ins::Pop, cond_span);
     let span = self.spanned(
       |this| this.statement()
     )?;
-    emit_loop(loop_start, span, self.current_chunk())?;
+    self.current().emit_loop(loop_start, span)?;
 
-    patch_jump(exit_jmp, span, self.current_chunk())?;
-    emit(Ins::Pop, span, self.current_chunk());
+    self.current().patch_jump(exit_jmp, span)?;
+    self.current().emit(Ins::Pop, span);
     Ok(())
   }
 
   /// Parse a for statement
   fn parse_for(&mut self) -> PResult<()> {
-    self.compiler.begin_scope();
+    self.current().begin_scope();
     use TokenType::*;
     let for_span = self.consume(For, S_MUST)?.span;
 
@@ -233,7 +301,7 @@ impl Parser<'_> {
           _ => this.expression()?
         };
 
-        let mut loop_start = this.current_chunk().len();
+        let mut loop_start = chunk!(this).len();
 
         // condition
         let exit_jmp = match this.current_token.kind {
@@ -241,8 +309,8 @@ impl Parser<'_> {
           _ => {
             let span = this.parse_expr()?;
 
-            let jmp = emit(Ins::JumpIfFalse(-1), span, this.current_chunk());
-            emit(Ins::Pop, span, this.current_chunk());
+            let jmp = this.current().emit(Ins::JumpIfFalse(-1), span);
+            this.current().emit(Ins::Pop, span);
             Some((jmp, span))
           },
         };
@@ -252,14 +320,15 @@ impl Parser<'_> {
         match this.current_token.kind {
           RightParen => {},
           _ => {
-            let body_jmp = emit(Ins::Jump(-1), this.current_token.span, this.current_chunk());
-            let inc_start = this.current_chunk().len();
+            let span = this.current_token.span;
+            let body_jmp = this.current().emit(Ins::Jump(-1), span);
+            let inc_start = chunk!(this).len();
             let inc_span = this.parse_expr()?;
-            emit(Ins::Pop, inc_span, this.current_chunk());
+            this.current().emit(Ins::Pop, inc_span);
 
-            emit_loop(loop_start, inc_span, this.current_chunk())?;
+            this.current().emit_loop(loop_start, inc_span)?;
             loop_start = inc_start;
-            patch_jump(body_jmp, inc_span, this.current_chunk())?;
+            this.current().patch_jump(body_jmp, inc_span)?;
           },
         };
 
@@ -268,21 +337,21 @@ impl Parser<'_> {
     )?;
 
     self.statement()?;
-    emit_loop(
+    let span = self.current_token.span;
+    self.current().emit_loop(
       loop_start, 
-      for_span.to(self.current_token.span), 
-      self.current_chunk()
+      for_span.to(span), 
     )?;
     if let Some((offset, span)) = exit_jmp {
-      patch_jump(offset, span, self.current_chunk())?;
-      emit(Ins::Pop, span, self.current_chunk());
+      self.current().patch_jump(offset, span)?;
+      self.current().emit(Ins::Pop, span);
     }
 
-    self.compiler.end_scope();
+    self.current().end_scope();
     Ok(())
   }
 
-  /// Parse a print statement.
+  /// Parse a print statement
   fn parse_print(&mut self) -> PResult<()> {
     use TokenType::*;
     let print_span = self.consume(Print, S_MUST)?.span;
@@ -291,7 +360,30 @@ impl Parser<'_> {
     let semicolon_span = self.consume(Semicolon,
     "Expected `;` after value")?.span;
 
-    emit(Ins::Print, print_span.to(semicolon_span), self.current_chunk());
+    self.current().emit(Ins::Print, print_span.to(semicolon_span));
+
+    Ok(())
+  }
+
+  /// Parse a return statement
+  fn parse_return(&mut self) -> PResult<()> {
+    use TokenType::*;
+    let return_span = self.consume(Return, S_MUST)?.span;
+    if self.current().fun_type == FunctionType::Script {
+      return Err(ParseError::Error { 
+        level: ErrorLevel::Warning, 
+        message: "Detected return from top-level code".into(), 
+        span: return_span
+      })
+    }
+
+    if self.take(Semicolon) {
+      self.emit_return();
+    } else {
+      self.parse_expr()?;
+      let span = self.consume(Semicolon, "Expected `;` after return value")?.span;
+      self.current().emit(Ins::Return, return_span.to(span));
+    }
 
     Ok(())
   }
@@ -302,7 +394,7 @@ impl Parser<'_> {
 
     let semicolon = self.consume(TokenType::Semicolon, "Expected end of expression")?.span;
 
-    emit(Ins::Pop, start.to(semicolon), self.current_chunk());
+    self.current().emit(Ins::Pop, start.to(semicolon));
     Ok(())
   }
 
@@ -315,7 +407,7 @@ impl Parser<'_> {
     let prev = self.prev_token.clone();
 
     if let TokenType::Number(n) = prev.kind {
-      emit(Ins::from(n), prev.span, self.current_chunk());
+      self.current().emit(Ins::from(n), prev.span);
     } else {
       return Err(ParseError::UnexpectedToken { 
         message: "Expected a number".into(), 
@@ -337,17 +429,16 @@ impl Parser<'_> {
       _ => unreachable!()
     };
 
-    emit(ins, prev.span, self.current_chunk());
+    self.current().emit(ins, prev.span);
     Ok(())
   }
 
   fn parse_string(&mut self) -> PResult<()> {
     let prev = self.prev_token.clone();
     match prev.kind {
-      TokenType::String(s) => emit(
+      TokenType::String(s) => self.current().emit(
         Ins::from(LoxObject::String(s)), 
         prev.span, 
-        self.current_chunk()
       ),
       _ => unreachable!()
     };
@@ -375,7 +466,7 @@ impl Parser<'_> {
 
   fn named_variable(&mut self, name: impl Into<String>, span: Span, can_assign: bool) -> PResult<()> {
     let name = name.into();
-    let arg = self.compiler.resolve_local(&name)?;
+    let arg = self.current().resolve_local(&name)?;
 
     let ins = if can_assign && self.take(TokenType::Equal) {
       self.parse_precedence(Precedence::Assignment)?;
@@ -390,34 +481,64 @@ impl Parser<'_> {
       }
     };
     
-    emit(ins, span, self.current_chunk());
+    self.current().emit(ins, span);
     Ok(())
   }
 
+  fn parse_call(&mut self) -> PResult<()> {
+    let open = self.prev_token.span;
+    let (args, close) = self.argument_list()?;
+    self.current().emit(Ins::Call(args), open.to(close));
+    Ok(())
+  }
+
+  fn argument_list(&mut self) -> PResult<(usize, Span)> {
+    let start = self.prev_token.span;
+    let mut count = 0;
+    if !self.is(TokenType::RightParen) {
+      loop {
+        self.parse_precedence(Precedence::Assignment)?;
+        if count == Self::MAX_ARGS {
+          return Err(ParseError::Error { 
+            level: ErrorLevel::Error, 
+            message: "Can't have more than 255 arguments".into(), 
+            span: start.to(self.prev_token.span) 
+          })
+        }
+        count += 1;
+        if !self.take(TokenType::Comma) {
+          break;
+        }
+      }
+    }
+    let span = self.consume(TokenType::RightParen, "Expected `)` after arguments")?.span;
+    Ok((count, span))
+  }
+  
   fn parse_and(&mut self) -> PResult<()> {
     let span = self.prev_token.span;
-    let end_jmp = emit(Ins::JumpIfFalse(-1), span, self.current_chunk());
-    emit(Ins::Pop, span, self.current_chunk());
+    let end_jmp = self.current().emit(Ins::JumpIfFalse(-1), span);
+    self.current().emit(Ins::Pop, span);
 
     let end_span = self.spanned(
       |this| this.parse_precedence(Precedence::And)
     )?;
-    patch_jump(end_jmp, end_span, self.current_chunk())?;
+    self.current().patch_jump(end_jmp, end_span)?;
     
     Ok(())
   }
 
   fn parse_or(&mut self) -> PResult<()> {
     let span = self.prev_token.span;
-    let else_jmp = emit(Ins::JumpIfFalse(-1), span, self.current_chunk());
-    let end_jmp = emit(Ins::Jump(-1), span, self.current_chunk());
-    patch_jump(else_jmp, span, self.current_chunk())?;
-    emit(Ins::Pop, span, self.current_chunk());
+    let else_jmp = self.current().emit(Ins::JumpIfFalse(-1), span);
+    let end_jmp = self.current().emit(Ins::Jump(-1), span);
+    self.current().patch_jump(else_jmp, span)?;
+    self.current().emit(Ins::Pop, span);
 
     let end_span = self.spanned(
       |this| this.parse_precedence(Precedence::Or)
     )?;
-    patch_jump(end_jmp, end_span, self.current_chunk())?;
+    self.current().patch_jump(end_jmp, end_span)?;
 
     Ok(())
   }
@@ -438,7 +559,7 @@ impl Parser<'_> {
       _ => unreachable!()
     };
 
-    emit(ins, op.span, self.current_chunk());
+    self.current().emit(ins, op.span);
 
     Ok(())
   }
@@ -455,25 +576,25 @@ impl Parser<'_> {
     
     match op.kind {
       Comma => unreachable!(),
-      Plus => emit(Ins::Add, op.span, self.current_chunk()),
-      Minus => emit(Ins::Subtract, op.span, self.current_chunk()),
-      Star => emit(Ins::Multiply, op.span, self.current_chunk()),
-      Slash => emit(Ins::Divide, op.span, self.current_chunk()),
+      Plus => self.current().emit(Ins::Add, op.span),
+      Minus => self.current().emit(Ins::Subtract, op.span),
+      Star => self.current().emit(Ins::Multiply, op.span),
+      Slash => self.current().emit(Ins::Divide, op.span),
 
       BangEqual => {
-        emit(Ins::Equal, op.span, self.current_chunk());
-        emit(Ins::Not, op.span, self.current_chunk())
+        self.current().emit(Ins::Equal, op.span);
+        self.current().emit(Ins::Not, op.span)
       }
-      EqualEqual => emit(Ins::Equal, op.span, self.current_chunk()),
-      Greater => emit(Ins::Greater, op.span, self.current_chunk()),
+      EqualEqual => self.current().emit(Ins::Equal, op.span),
+      Greater => self.current().emit(Ins::Greater, op.span),
       GreaterEqual => {
-        emit(Ins::Less, op.span, self.current_chunk());
-        emit(Ins::Not, op.span, self.current_chunk())
+        self.current().emit(Ins::Less, op.span);
+        self.current().emit(Ins::Not, op.span)
       },
-      Less => emit(Ins::Less, op.span, self.current_chunk()),
+      Less => self.current().emit(Ins::Less, op.span),
       LessEqual => {
-        emit(Ins::Greater, op.span, self.current_chunk());
-        emit(Ins::Not, op.span, self.current_chunk())
+        self.current().emit(Ins::Greater, op.span);
+        self.current().emit(Ins::Not, op.span)
       },
 
       _ => unreachable!()
@@ -514,7 +635,8 @@ impl Parser<'_> {
     };
 
     if prec <= Precedence::Sequence && self.prev_token.kind == TokenType::Comma {
-      emit(Ins::Pop, self.prev_token.span, self.current_chunk());
+      let span = self.prev_token.span;
+      self.current().emit(Ins::Pop, span);
       self.parse_expr()?;
     }
 
@@ -532,6 +654,7 @@ impl Parser<'_> {
       F::Literal => self.parse_literal(),
       F::String => self.parse_string(),
       F::Variable => self.parse_variable(*prec <= Precedence::Assignment),
+      F::Call => self.parse_call(),
       F::And => self.parse_and(),
       F::Or => self.parse_or(),
       F::None => none_return
@@ -543,25 +666,19 @@ impl Parser<'_> {
 // The parser helper methods.
 impl<'src> Parser<'src> {
   /// Creates a new parser.
-  pub fn new(src: &'src str, compiler: Compiler) -> Self {
-    let mut chunks = Vec::new();
-    chunks.push(Chunk::new("main"));
+  pub fn new(src: &'src str, module: Rc<RefCell<Module>>) -> Self {
     let mut parser = Self {
       scanner: Scanner::new(src),
       current_token: Token::dummy(),
       prev_token: Token::dummy(),
       panic_mode: false,
-      chunks,
       diagnostics: Vec::new(),
       _options: ParserOptions::default(),
-      compiler
+      compiler: RefCell::new(Compiler::new()),
+      module
     };
     parser.advance(); // The first advancement.
     parser
-  }
-
-  pub fn current_chunk(&mut self) -> &mut Chunk {
-    self.chunks.last_mut().unwrap()
   }
 
   /// Advances the parser and returns a reference to the `prev_token` field.
@@ -629,6 +746,20 @@ impl<'src> Parser<'src> {
     } else {
       Err(self.unexpected(msg, Some(expected)))
     }
+  }
+
+  /// Consumes the next identifier and declares it as a variable
+  fn consume_var(&mut self, msg: impl Into<String>) -> PResult<(LoxObject, Span)> {
+    let (ident, ident_span) = self.consume_ident(msg)?;
+
+    if let Err(err) = self.current().declare_variable(&ident, ident_span) {
+      if err.get_level() > ErrorLevel::Warning {
+        return Err(err)
+      } else {
+        err.report()
+      }
+    };
+    Ok((ident, ident_span))
   }
 
   /// Get span of parsed section
@@ -724,10 +855,39 @@ impl<'src> Parser<'src> {
     self.current_token.kind == TokenType::EOF
   }
 
-  fn end_scope(&mut self, span: Span) {
-    let count = self.compiler.end_scope();
-    emit(Ins::PopN(count), span, self.current_chunk());
+  
+
+}
+
+/// Get a mutable reference to the current chunk
+macro_rules! chunk {
+  ($self:ident) => {
+    &mut $self.current().function.chunk
+  };
+}
+
+use chunk;
+
+/// Compiler wrappers
+impl Parser<'_> {
+
+  #[inline]
+  fn current(&mut self) -> RefMut<Compiler> {
+    self.compiler.borrow_mut()
   }
+
+  fn end_scope(&mut self, span: Span) {
+    let count = self.current().end_scope();
+    self.current().emit(Ins::PopN(count), span);
+  }
+
+  /// Emit an implicit return `nil` at the end of a function body
+  fn emit_return(&mut self) {
+    let span = self.prev_token.span;
+    self.current().emit(Ins::Nil, span);
+    self.current().emit(Ins::Return, span);
+  }
+
 
 }
 

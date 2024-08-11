@@ -2,7 +2,7 @@ use std::{fmt::Display, iter::Zip, slice::Iter};
 
 use crate::common::{Ins, Span};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Chunk {
   pub name: String,
   pub code: Vec<Ins>,

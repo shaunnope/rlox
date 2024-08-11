@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn can_cast_precedence_from_usize() {
-  assert_eq!(Precedence::from(5), Precedence::Comparision);
+  assert_eq!(Precedence::from(6), Precedence::Comparision);
   assert_eq!(Precedence::from(0), Precedence::None);
   assert_eq!(Precedence::from(20), Precedence::None);
 }
@@ -26,8 +26,7 @@ print return super this true var while // comment
 comment */
 /* inline block*/
 forest varied\0";
-
-  let mut parser = Parser::new(source, Compiler::new());
+  let mut parser = Parser::new(source, Module::new());
 
   assert_eq!(parser.advance(), &Token::new(TokenType::LeftParen, Span::new(0, 1, 1)));
   assert_eq!(parser.advance(), &Token::new(TokenType::RightParen, Span::new(2, 3, 1)));

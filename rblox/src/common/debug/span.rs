@@ -26,7 +26,7 @@ impl Span {
   }
 
   /// Check if the span contains the given position.
-  pub fn contains_p(&self, position: usize) -> bool {
+  pub fn _contains_p(&self, position: usize) -> bool {
     self.0 <= position && position < self.1
   }
 

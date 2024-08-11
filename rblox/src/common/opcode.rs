@@ -21,6 +21,8 @@ pub enum Ins {
   GetLocal(usize),
   SetLocal(usize),
 
+  Call(usize),
+
   Jump(isize),
   JumpIfFalse(isize),
   // Loop(usize),
@@ -57,9 +59,10 @@ impl Debug for Ins {
       GetLocal(var) => write!(f, "{:PAD$}{var}", "OP_GET_LOC"),
       SetLocal(var) => write!(f, "{:PAD$}{var}", "OP_SET_LOC"),
 
+      Call(args) => write!(f, "{:PAD$}{args}", "OP_CALL"),
+
       Jump(n) => write!(f, "{:PAD$}{n}", "OP_JMP"),
       JumpIfFalse(n) => write!(f, "{:PAD$}{n}", "OP_JMPF"),
-      // Loop(n) => write!(f, "{:PAD$}{n}", "OP_LOOP"),
 
       Print => write!(f, "OP_PRINT"),
       Pop => write!(f, "OP_POP"),

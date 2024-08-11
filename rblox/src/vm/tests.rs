@@ -5,6 +5,7 @@ use crate::common::Span;
 mod challenges;
 mod variables;
 mod sequence;
+mod functions;
 
 #[test]
 fn correct_arith() {
@@ -17,12 +18,13 @@ fn correct_arith() {
   chunk.write(Ins::Divide, Span::dummy(3));
   chunk.write(Ins::Negate, Span::dummy(3));
   chunk.write(Ins::Return, Span::dummy(3));
-  let _ = vm.interpret(chunk);
+  vm.add_chunk(chunk);
+  let _ = vm.interpret();
 }
 
 #[test]
 fn process_arith() {
-  let source = "1+2-3*-4/(5-6)";
+  let source = "print 1+2-3*-4/(5-6);";
   let mut vm = VM::new();
 
   if let Err(err) = vm.run(source) {
@@ -34,15 +36,15 @@ fn process_arith() {
 fn process_literals() {
   let mut vm = VM::new();
 
-  if let Err(err) = vm.run("true") {
+  if let Err(err) = vm.run("true;") {
     eprintln!("{err:?}")
   };
 
-  if let Err(err) = vm.run("false") {
+  if let Err(err) = vm.run("false;") {
     eprintln!("{err:?}")
   };
 
-  if let Err(err) = vm.run("nil") {
+  if let Err(err) = vm.run("nil;") {
     eprintln!("{err:?}")
   };
 }
@@ -59,7 +61,7 @@ fn process_types() {
 
 #[test]
 fn concat_strings() {
-  let source = "\"st\" + \"ri\" + \"ng\"";
+  let source = "print \"st\" + \"ri\" + \"ng\";";
   let mut vm = VM::new();
 
   if let Err(err) = vm.run(source) {

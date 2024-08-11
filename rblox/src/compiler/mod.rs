@@ -1,9 +1,15 @@
-use parser::error::ParseError;
+
+use std::{cell::RefCell, rc::Rc};
+
+use scope::Module;
 
 use crate::{
-  common::{data::LoxObject, error::ErrorLevel, Chunk, Ins, Span},
+  common::{data::{LoxFunction, LoxObject}, error::ErrorLevel, Chunk, Ins, Span},
   compiler::{
-    parser::{PResult, Parser, ParserOutcome},
+    parser::{
+      error::ParseError,
+      PResult, Parser, ParserOutcome
+    },
     scope::Local
   }
 };
@@ -14,73 +20,52 @@ mod tests;
 pub mod scanner;
 pub mod parser;
 
-mod scope;
+pub mod scope;
 
-pub fn compile(src: &str) -> ParserOutcome {
-  let compiler = Compiler::new();
-  let parser = Parser::new(src, compiler);
-
+pub fn compile(src: &str, module: Rc<RefCell<Module>>) -> ParserOutcome {
+  let parser = Parser::new(src, module);
   parser.parse()
 }
 
-pub fn emit(ins: Ins, span: Span, chunk: &mut Chunk) -> usize {
-  chunk.write(ins, span);
-  chunk.len() - 1
-}
-
-pub fn patch_jump(offset: usize, span: Span, chunk: &mut Chunk) -> PResult<()> {
-  assert!(offset <= chunk.len());
-  let jump = chunk.len() - offset - 1;
-  if jump as u16 > std::u16::MAX {
-    return Err(ParseError::InvalidJump { 
-      message: "Too much code to jump over".into(), 
-      span 
-    })
-  }
-
-  let ins = match chunk.get(offset).unwrap() {
-    (Ins::Jump(_), _) => Ins::Jump(jump as isize),
-    (Ins::JumpIfFalse(_), _) => Ins::JumpIfFalse(jump as isize),
-    (unexpected, span) => return Err(ParseError::InvalidJump { 
-      message: format!("Not a jump instruction. Got {unexpected:?}"),
-      span: *span
-    })
-  };
-  chunk.code[offset] = ins;
-  Ok(())
-}
-
-pub fn emit_loop(start: usize, span: Span, chunk: &mut Chunk) -> PResult<usize> {
-  if start >= chunk.len() {
-    return Err(ParseError::InvalidJump { 
-      message: "Cannot jump ahead when looping".into(),
-      span
-    })
-  };
-
-  let offset = chunk.len() + 1 - start;
-  if offset as u16 > std::u16::MAX {
-    return Err(ParseError::InvalidJump { 
-      message: "Loop body too large".into(), 
-      span 
-    })
-  }
-
-  Ok(emit(Ins::Jump(-(offset as isize)), span, chunk))
-}
-
 pub struct Compiler {
+  pub function: LoxFunction,
+  pub fun_type: FunctionType,
   pub locals: Vec<Local>,
-  scope_depth: i32
+  scope_depth: i32,
+}
+
+#[derive(PartialEq)]
+pub enum FunctionType {
+  Function,
+  Native,
+  Script,
 }
 
 impl Compiler {
-  const MAX_SIZE: usize = 512;
+  const LOCALS_MIN: usize = 128;
+  const LOCALS_MAX: usize = 512;
   pub fn new() -> Self {
+    Self::build("<main>", FunctionType::Script)
+  }
+
+  fn build(name: &str, fun_type: FunctionType) -> Self {
+    let mut locals = Vec::with_capacity(Self::LOCALS_MIN);
+    locals.push(Local {
+      name: name.into(),
+      span: Span::new(0,0,0),
+      depth: 0
+    });
+
     Self {
-      locals: Vec::with_capacity(Self::MAX_SIZE),
-      scope_depth: 0
+      function: LoxFunction::new(name),
+      fun_type,
+      locals,
+      scope_depth: 0,
     }
+  }
+
+  fn chunk(&mut self) -> &mut Chunk {
+    &mut self.function.chunk
   }
 
   fn begin_scope(&mut self) {
@@ -139,7 +124,7 @@ impl Compiler {
   }
 
   fn add_local(&mut self, name: impl Into<String>, span: Span) -> PResult<()> {
-    if self.locals.len() == self.locals.capacity() {
+    if self.locals.len() == Self::LOCALS_MAX {
       return Err(ParseError::Error { 
         level: ErrorLevel::Error, 
         message: "Too many local variables in function".into(), 
@@ -157,6 +142,7 @@ impl Compiler {
   }
 
   fn mark_init(&mut self) {
+    if self.scope_depth == 0 { return };
     let local = self.locals.last_mut().unwrap();
     local.depth = self.scope_depth;
   }
@@ -180,4 +166,60 @@ impl Compiler {
     }
     Ok(None)
   }
+
+}
+
+/// Chunk writers
+impl Compiler {
+  const JUMP_MAX: usize = std::u16::MAX as usize;
+  fn emit(&mut self, ins: Ins, span: Span) -> usize {
+    let chunk = self.chunk();
+    chunk.write(ins, span);
+    chunk.len() - 1
+  }
+
+  fn patch_jump(&mut self, offset: usize, span: Span) -> PResult<()> {
+    let chunk = self.chunk();
+
+    assert!(offset <= chunk.len());
+    let jump = chunk.len() - offset - 1;
+    if jump > Self::JUMP_MAX {
+      return Err(ParseError::InvalidJump { 
+        message: "Too much code to jump over".into(), 
+        span 
+      })
+    }
+
+    let ins = match chunk.get(offset).unwrap() {
+      (Ins::Jump(_), _) => Ins::Jump(jump as isize),
+      (Ins::JumpIfFalse(_), _) => Ins::JumpIfFalse(jump as isize),
+      (unexpected, span) => return Err(ParseError::InvalidJump { 
+        message: format!("Not a jump instruction. Got {unexpected:?}"),
+        span: *span
+      })
+    };
+    chunk.code[offset] = ins;
+    Ok(())
+  }
+
+  fn emit_loop(&mut self, start: usize, span: Span) -> PResult<usize> {
+    let chunk = self.chunk();
+    if start >= chunk.len() {
+      return Err(ParseError::InvalidJump { 
+        message: "Cannot jump ahead when looping".into(),
+        span
+      })
+    };
+
+    let offset = chunk.len() + 1 - start;
+    if offset > Self::JUMP_MAX {
+      return Err(ParseError::InvalidJump { 
+        message: "Loop body too large".into(), 
+        span 
+      })
+    }
+
+    Ok(self.emit(Ins::Jump(-(offset as isize)), span))
+  }
+
 }
