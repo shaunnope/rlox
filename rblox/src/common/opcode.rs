@@ -22,6 +22,7 @@ pub enum Ins {
   SetLocal(usize),
 
   Call(usize),
+  Closure(usize),
 
   Jump(isize),
   JumpIfFalse(isize),
@@ -60,6 +61,11 @@ impl Debug for Ins {
       SetLocal(var) => write!(f, "{:PAD$}{var}", "OP_SET_LOC"),
 
       Call(args) => write!(f, "{:PAD$}{args}", "OP_CALL"),
+      Closure(n) => {
+        write!(f, "{:PAD$}{n}", "OP_CLOSURE")?;
+        // TODO: print value
+        Ok(())
+      },
 
       Jump(n) => write!(f, "{:PAD$}{n}", "OP_JMP"),
       JumpIfFalse(n) => write!(f, "{:PAD$}{n}", "OP_JMPF"),

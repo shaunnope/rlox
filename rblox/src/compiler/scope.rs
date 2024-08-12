@@ -1,7 +1,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::common::{data::{LoxFunction, NativeFunction}, Span};
+use crate::common::{data::{LoxClosure, LoxFunction, NativeFunction}, Span};
 
 pub struct Local {
   pub name : String,
@@ -12,7 +12,8 @@ pub struct Local {
 #[derive(Debug, Default)]
 pub struct Module {
   pub functions: Vec<Rc<LoxFunction>>,
-  pub natives: Vec<Rc<NativeFunction>>
+  pub natives: Vec<Rc<NativeFunction>>,
+  pub closures: Vec<Rc<LoxClosure>>,
 }
 
 impl Module {
@@ -36,5 +37,12 @@ impl Push<NativeFunction> for Module {
   fn push(&mut self, func: NativeFunction) -> usize {
     self.natives.push(Rc::new(func));
     self.natives.len() - 1
+  }
+}
+
+impl Push<LoxClosure> for Module {
+  fn push(&mut self, func: LoxClosure) -> usize {
+    self.closures.push(Rc::new(func));
+    self.closures.len() - 1
   }
 }

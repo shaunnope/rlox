@@ -7,7 +7,7 @@ use rules::ParseFn;
 
 use crate::{
   common::{
-    data::LoxObject, 
+    data::{LoxClosure, LoxObject}, 
     error::{ErrorLevel, LoxError}, 
     Ins, Span
   },
@@ -174,9 +174,19 @@ impl Parser<'_> {
     )?;
     let block_span = self.parse_block()?;
 
-    let func = self.compiler.replace(enclosing).function;
-    let func = self.module.borrow_mut().push(func);
-    self.current().emit(Ins::from(LoxObject::Function(name, func)), span.to(block_span));
+    
+    let clos = {
+      let func = self.compiler.replace(enclosing).function;
+      self.module.borrow_mut().push(func);
+
+      let closure = LoxClosure::new(
+        self.module.borrow_mut().functions.last().unwrap().clone()
+      );
+      self.module.borrow_mut().push(closure)
+    };
+
+
+    self.current().emit(Ins::from(LoxObject::Closure(name, clos)), span.to(block_span));
     
     Ok(())
   }

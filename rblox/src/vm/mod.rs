@@ -2,16 +2,16 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
   common::{
-    data::{LoxFunction, LoxObject}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
+    data::{LoxClosure, LoxObject}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
     Ins, Span, Value
   }, 
-  compiler::{compile, scope::Module, FunctionType},
+  compiler::{compile, scope::{Module, Push}, FunctionType},
   gc::mmap::MemManager,
   vm::error::RuntimeError
 };
 
 #[cfg(test)]
-use crate::common::Chunk;
+use crate::common::{Chunk, data::LoxFunction};
 
 #[cfg(test)]
 mod tests;
@@ -20,7 +20,7 @@ pub mod error;
 pub mod native;
 
 struct CallFrame {
-  function: Rc<LoxFunction>,
+  function: Rc<LoxClosure>,
   ip: usize,
   /// start of VM stack
   start: usize, 
@@ -28,8 +28,8 @@ struct CallFrame {
 
 impl Display for CallFrame {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      let (_, span) = self.function.chunk.get(self.ip - 1).unwrap();
-      write!(f, "[line {}] in {}; at position {}", span.2, self.function.name, span)?;
+      let (_, span) = self.function.fun.chunk.get(self.ip - 1).unwrap();
+      write!(f, "[line {}] in {}; at position {}", span.2, self.function.fun.name, span)?;
 
       Ok(())
   }
@@ -63,7 +63,7 @@ impl VM {
     let main = self.module.clone().borrow_mut().functions.last().unwrap().clone();
 
     self.frames.push(CallFrame { 
-      function: main,
+      function: Rc::new(LoxClosure::new(main)),
       ip: 0, 
       start: 0
     });
@@ -217,6 +217,16 @@ impl VM {
           self.call_value(args)?;
         },
 
+        Closure(n) => {
+          let func = self.module.clone().borrow_mut()
+            .functions.get(n).unwrap().clone();
+          let name = func.name.clone();
+          let closure = LoxClosure::new(func);
+
+          let offset = self.module.borrow_mut().push(closure);
+          self.push(Value::Object(Rc::new(LoxObject::Closure(name, offset))))?;
+        }
+
         Jump(offset) => {
           ip = ((ip as isize) + offset) as usize;
           jumped = true;
@@ -256,12 +266,13 @@ impl VM {
     let (kind, idx) = match callee {
       Object(obj) if obj.is_callable() => {
         match &**obj {
-          L::Function(_, idx) => {
-            (F::Function, *idx)
-          },
+          L::Function(_, _) => unreachable!("Functions should be wrapped as closures."),
           L::Native(_, idx) => {
             (F::Native, *idx)
           },
+          L::Closure(_, idx) => {
+            (F::Function, *idx)
+          }
           _ => unreachable!()
         }
       },
@@ -276,7 +287,7 @@ impl VM {
 
     match kind {
       F::Function => {
-        let function = self.module.clone().borrow_mut().functions.get(idx).unwrap().clone();
+        let function = self.module.clone().borrow_mut().closures.get(idx).unwrap().clone();
 
         self.call(function, args)?;
       },
@@ -296,12 +307,12 @@ impl VM {
     Ok(())
   }
 
-  fn call(&mut self, function: Rc<LoxFunction>, args: usize) -> LoxResult<RuntimeError> {
-    if args != function.arity {
+  fn call(&mut self, closure: Rc<LoxClosure>, args: usize) -> LoxResult<RuntimeError> {
+    if args != closure.fun.arity {
       return Err(RuntimeError::UnsupportedType {  
         message: format!(
           "Expected {} arguments, but got {}",
-          function.arity,
+          closure.fun.arity,
           args
         ), 
         span: self.span, 
@@ -315,7 +326,7 @@ impl VM {
 
     let start = self.stack.len()-args-1;
     self.frames.push(CallFrame {
-      function: function.clone(),
+      function: closure.clone(),
       ip: 0,
       start
     });
@@ -392,7 +403,7 @@ impl VM {
   /// Advance ip
   fn advance(&mut self) -> Option<(usize, Ins, Span)> {
     let frame = self.frames.last_mut().unwrap();
-    let chunk = &frame.function.chunk;
+    let chunk = &frame.function.fun.chunk;
 
     match chunk.get(frame.ip) {
       None => None,
@@ -418,11 +429,13 @@ impl VM {
 
   #[cfg(test)]
   fn add_chunk(&mut self, chunk: Chunk) {
-    let function = Rc::new(LoxFunction {
-      name: chunk.name.clone(),
-      arity: 0,
-      chunk
-    });
+    let function = Rc::new(LoxClosure::from(
+      LoxFunction {
+        name: chunk.name.clone(),
+        arity: 0,
+        chunk
+      }
+    ));
 
     self.frames.push(CallFrame {
       function,

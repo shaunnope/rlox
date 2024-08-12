@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Display}, mem};
+use std::{fmt::{Debug, Display}, mem, rc::Rc};
 
 use crate::{
   common::{
@@ -18,7 +18,8 @@ pub enum LoxObject {
   Identifier(String),
   String(String),
   Function(String, usize),
-  Native(String, usize)
+  Native(String, usize),
+  Closure(String, usize)
 }
 
 impl LoxObject {
@@ -28,8 +29,8 @@ impl LoxObject {
     match self {
       Identifier(_) => "<ident>",
       String(_) => "string",
-      Function(_, _) => "<func>",
-      Native(_, _) => "<native fn>"
+      Function(_, _) | Closure(_, _) => "<func>",
+      Native(_, _) => "<native fn>",
       // Class(_) => "<class>",
       // Object(_) => "<instance>",
     }
@@ -41,7 +42,8 @@ impl LoxObject {
       Identifier(s) | 
       String(s) | 
       Function(s, _) |
-      Native(s, _)
+      Native(s, _) |
+      Closure(s, _)
       => s
     }
   }
@@ -67,6 +69,8 @@ impl Display for LoxObject {
       String(s) => write!(f, "{s}"),
       Function(name, n) => write!(f, "<fn {name} {n}>"),
       Native(name, _) => write!(f, "<std {name}>"),
+      Closure(name, n) => write!(f, "<fn'{name} {n}>"),
+
     }
   }
 }
@@ -136,5 +140,21 @@ impl NativeFunction {
 impl Debug for NativeFunction {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "<native {} ({})>", self.name, self.arity)
+  }
+}
+
+#[derive(Debug)]
+pub struct LoxClosure {
+  pub fun: Rc<LoxFunction>
+}
+impl LoxClosure {
+  pub fn new(func: Rc<LoxFunction>) -> Self {
+    Self { fun: func.clone() }
+  }
+}
+
+impl From<LoxFunction> for LoxClosure {
+  fn from(function: LoxFunction) -> Self {
+    Self { fun: Rc::new(function)}
   }
 }
