@@ -54,10 +54,11 @@ impl Chunk {
 
 }
 
-
+// TODO: improve disassembly of OP_CLOSURE
+// ins only has idx to closure in table
 impl Display for Chunk {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    writeln!(f, "=== {} ===", self.name)?;
+    writeln!(f, "===== {} =====", self.name)?;
     let mut last_line = 0;
     for (ins, span) in self.code.iter().zip(self.spans.iter()) {
       if last_line != span.2 {

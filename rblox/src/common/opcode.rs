@@ -21,8 +21,11 @@ pub enum Ins {
   GetLocal(usize),
   SetLocal(usize),
 
+  GetUpval(usize),
+  SetUpval(usize),
+
   Call(usize),
-  Closure(usize),
+  Closure(usize, Rc<Vec<(bool, usize)>>),
 
   Jump(isize),
   JumpIfFalse(isize),
@@ -60,10 +63,16 @@ impl Debug for Ins {
       GetLocal(var) => write!(f, "{:PAD$}{var}", "OP_GET_LOC"),
       SetLocal(var) => write!(f, "{:PAD$}{var}", "OP_SET_LOC"),
 
+      GetUpval(var) => write!(f, "{:PAD$}{var}", "OP_GET_UPV"),
+      SetUpval(var) => write!(f, "{:PAD$}{var}", "OP_SET_UPV"),
+
       Call(args) => write!(f, "{:PAD$}{args}", "OP_CALL"),
-      Closure(n) => {
-        write!(f, "{:PAD$}{n}", "OP_CLOSURE")?;
-        // TODO: print value
+      Closure(n, upvals) => {
+        write!(f, "{:PAD$}{n}  ", "OP_CLOSURE")?;
+        // TODO: print upvalue
+        for val in upvals.iter() {
+          write!(f, "{}{} ", if val.0 {">"} else {"^"}, val.1 )?;
+        }
         Ok(())
       },
 

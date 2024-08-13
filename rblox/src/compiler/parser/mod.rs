@@ -140,6 +140,7 @@ impl Parser<'_> {
     let enclosing = self.compiler.replace(
       Compiler::build(&name, kind)
     );
+    self.compiler.borrow_mut().bind(enclosing);
     // does not have a corresponding `end_scope` because the enclosed compiler
     // ends after the function body is parsed
     self.current().begin_scope();
@@ -175,19 +176,22 @@ impl Parser<'_> {
     let block_span = self.parse_block()?;
 
     
-    let clos = {
-      let func = self.compiler.replace(enclosing).function;
+    let (clos, upvals) = {
+      let enclosing = self.compiler.borrow_mut().unbind();
+      let enclosed = self.compiler.replace(enclosing);
+      
+      let func = enclosed.function;
       self.module.borrow_mut().push(func);
 
       let closure = LoxClosure::new(
         self.module.borrow_mut().functions.last().unwrap().clone()
       );
-      self.module.borrow_mut().push(closure)
+      (self.module.borrow_mut().push(closure), Rc::new(enclosed.upvalues))
     };
 
-
-    self.current().emit(Ins::from(LoxObject::Closure(name, clos)), span.to(block_span));
+    self.current().emit(Ins::Closure(clos, upvals), span.to(block_span));
     
+
     Ok(())
   }
 
@@ -476,18 +480,28 @@ impl Parser<'_> {
 
   fn named_variable(&mut self, name: impl Into<String>, span: Span, can_assign: bool) -> PResult<()> {
     let name = name.into();
-    let arg = self.current().resolve_local(&name)?;
+
+
+    let (is_loc, mut arg) = match self.current().resolve_local(&name)? {
+      Some(n) => (true, Some(n)),
+      None => (false, None)
+    };
+    if !is_loc {
+      arg = self.current().resolve_upvalue(&name, span)?;
+    }
 
     let ins = if can_assign && self.take(TokenType::Equal) {
       self.parse_precedence(Precedence::Assignment)?;
-      match arg {
-        Some(n) => Ins::SetLocal(n),
-        None => Ins::SetGlobal(name)
+      match (is_loc, arg) {
+        (true, Some(n)) => Ins::SetLocal(n),
+        (_, Some(n)) => Ins::SetUpval(n),
+        _ => Ins::SetGlobal(name)
       }
     } else {
-      match arg {
-        Some(n) => Ins::GetLocal(n),
-        None => Ins::GetGlobal(name)
+      match (is_loc, arg) {
+        (true, Some(n)) => Ins::GetLocal(n),
+        (_, Some(n)) => Ins::GetUpval(n),
+        _ => Ins::GetGlobal(name)
       }
     };
     

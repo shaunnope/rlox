@@ -38,6 +38,11 @@ pub enum ParseError {
     span: Span 
   },
 
+  StackOverflow { 
+    message: String,
+    span: Span 
+  },
+
   DetectedLambda,
 }
 
@@ -45,7 +50,8 @@ impl Display for ParseError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     use ParseError::*;
     match self {
-      Error { message, span , ..} => {
+      Error { message, span , ..} |
+      StackOverflow { message, span } => {
         write!(f, "{}; at position {}", message, span)
       }
 
@@ -98,7 +104,10 @@ impl ParseError {
   pub fn primary_span(&self) -> Span {
     use ParseError::*;
     match self {
-      Error { span, .. } | ScanError { span, .. } | InvalidJump { span, ..}
+      Error { span, .. } | 
+      ScanError { span, .. } | 
+      InvalidJump { span, ..} |
+      StackOverflow { span, .. }
       => *span,
       UnexpectedToken { offending, .. } => offending.span,
       DetectedLambda => unreachable!(),

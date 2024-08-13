@@ -1,5 +1,5 @@
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::common::{data::{LoxClosure, LoxFunction, NativeFunction}, Span};
 
@@ -13,12 +13,33 @@ pub struct Local {
 pub struct Module {
   pub functions: Vec<Rc<LoxFunction>>,
   pub natives: Vec<Rc<NativeFunction>>,
-  pub closures: Vec<Rc<LoxClosure>>,
+  pub closures: Vec<Rc<RefCell<LoxClosure>>>,
 }
 
 impl Module {
   pub fn new() -> Rc<RefCell<Self>> {
     Rc::new(RefCell::new(Self::default()))
+  }
+}
+
+impl Display for Module {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    const PAD: usize = 31;
+    writeln!(f, "{:=^1$}", "| FUNCTIONS |", PAD)?;
+    for func in self.functions.iter() {
+      writeln!(f, "{:?}", func)?;
+    }
+    writeln!(f, "{:=^1$}", "| NATIVES |", PAD)?;
+    for func in self.natives.iter() {
+      write!(f, "{:?}, ", func)?;
+    }
+    writeln!(f, "\n\n{:=^1$}\n", "| CLOSURES |", PAD)?;
+    for func in self.closures.iter() {
+      writeln!(f, "{:?}", func.borrow())?;
+    }
+
+    writeln!(f, "\n{:=^1$}", "", PAD)?;
+    Ok(())
   }
 }
 
@@ -42,7 +63,7 @@ impl Push<NativeFunction> for Module {
 
 impl Push<LoxClosure> for Module {
   fn push(&mut self, func: LoxClosure) -> usize {
-    self.closures.push(Rc::new(func));
+    self.closures.push(Rc::new(RefCell::new(func)));
     self.closures.len() - 1
   }
 }

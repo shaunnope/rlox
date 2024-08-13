@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
   common::{
-    data::{LoxClosure, LoxObject}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
+    data::{LoxClosure, LoxObject, LoxUpvalue}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
     Ins, Span, Value
   }, 
   compiler::{compile, scope::{Module, Push}, FunctionType},
@@ -20,7 +20,7 @@ pub mod error;
 pub mod native;
 
 struct CallFrame {
-  function: Rc<LoxClosure>,
+  function: Rc<RefCell<LoxClosure>>,
   ip: usize,
   /// start of VM stack
   start: usize, 
@@ -28,8 +28,9 @@ struct CallFrame {
 
 impl Display for CallFrame {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      let (_, span) = self.function.fun.chunk.get(self.ip - 1).unwrap();
-      write!(f, "[line {}] in {}; at position {}", span.2, self.function.fun.name, span)?;
+      let func = self.function.borrow();
+      let (_, span) = func.fun.chunk.get(self.ip - 1).unwrap();
+      write!(f, "[line {}] in {}; at position {}", span.2, func.fun.name, span)?;
 
       Ok(())
   }
@@ -57,13 +58,13 @@ impl VM {
     }
 
     if cfg!(debug_assertions) {
-      println!("{:?}", self.module);
+      println!("{}", self.module.borrow());
     }
     
     let main = self.module.clone().borrow_mut().functions.last().unwrap().clone();
 
     self.frames.push(CallFrame { 
-      function: Rc::new(LoxClosure::new(main)),
+      function: Rc::new(RefCell::new(LoxClosure::new(main))),
       ip: 0, 
       start: 0
     });
@@ -89,9 +90,9 @@ impl VM {
       };
 
       // if cfg!(features = "debug-step") {
-        if cfg!(debug_assertions) {
-        display_instr(&self.stack, &inst);
-      }
+      //   if cfg!(debug_assertions) {
+      //   display_instr(&self.stack, &inst);
+      // }
       let mut jumped = false;
 
       match inst {
@@ -213,18 +214,37 @@ impl VM {
           self.set(slot, val);
         }
 
+        GetUpval(slot) => {
+          let val = self.get_upvalue(slot).copy();
+          self.push(val)?;
+        },
+        SetUpval(slot) => {
+          let val = self.peek(0).unwrap().clone();
+          self.set_upvalue(slot, val);
+        }
+
+
         Call(args) => {
           self.call_value(args)?;
         },
 
-        Closure(n) => {
+        Closure(n, upvals) => {
           let func = self.module.clone().borrow_mut()
             .functions.get(n).unwrap().clone();
           let name = func.name.clone();
-          let closure = LoxClosure::new(func);
+          let closure = self.module.borrow().closures.get(n).unwrap().clone();
+          
+          for (is_local, idx) in upvals.iter() {
+            let upval = if *is_local {
+              self.capture_upval(*idx)?
+            } else {
+              LoxUpvalue(self.get_upvalue(*idx))
+            };
 
-          let offset = self.module.borrow_mut().push(closure);
-          self.push(Value::Object(Rc::new(LoxObject::Closure(name, offset))))?;
+            closure.borrow_mut().upvalues.push(upval);
+          }
+
+          self.push(Value::Object(Rc::new(LoxObject::Closure(name, n))))?;
         }
 
         Jump(offset) => {
@@ -307,12 +327,12 @@ impl VM {
     Ok(())
   }
 
-  fn call(&mut self, closure: Rc<LoxClosure>, args: usize) -> LoxResult<RuntimeError> {
-    if args != closure.fun.arity {
+  fn call(&mut self, closure: Rc<RefCell<LoxClosure>>, args: usize) -> LoxResult<RuntimeError> {
+    if args != closure.borrow().fun.arity {
       return Err(RuntimeError::UnsupportedType {  
         message: format!(
           "Expected {} arguments, but got {}",
-          closure.fun.arity,
+          closure.borrow().fun.arity,
           args
         ), 
         span: self.span, 
@@ -331,6 +351,11 @@ impl VM {
       start
     });
     Ok(())
+  }
+
+  fn capture_upval(&mut self, idx: usize) -> Result<LoxUpvalue, RuntimeError> {
+    let val = self.get(idx).clone();
+    Ok(LoxUpvalue(Rc::new(val)))
   }
 
 }
@@ -400,10 +425,24 @@ impl VM {
     *val = value;
   }
 
+  /// Get upvalue in top frame
+  fn get_upvalue(&mut self, slot: usize) -> Rc<Value> {
+    let frame = self.frames.last().unwrap();
+    frame.function.borrow().upvalues.get(slot).unwrap().0.clone()
+  }
+
+  /// Set indexed upvalue to a value
+  fn set_upvalue(&mut self, slot: usize, value: Value) {
+    let mut fun = self.frames.last_mut().unwrap().function.borrow_mut();
+    let upval = fun.upvalues.get_mut(slot).unwrap();
+    
+    *upval = LoxUpvalue(Rc::new(value))
+  }
+
   /// Advance ip
   fn advance(&mut self) -> Option<(usize, Ins, Span)> {
     let frame = self.frames.last_mut().unwrap();
-    let chunk = &frame.function.fun.chunk;
+    let chunk = &frame.function.borrow().fun.chunk;
 
     match chunk.get(frame.ip) {
       None => None,
@@ -429,12 +468,15 @@ impl VM {
 
   #[cfg(test)]
   fn add_chunk(&mut self, chunk: Chunk) {
-    let function = Rc::new(LoxClosure::from(
-      LoxFunction {
-        name: chunk.name.clone(),
-        arity: 0,
-        chunk
-      }
+    let function = Rc::new(RefCell::new(
+      LoxClosure::from(
+        LoxFunction {
+          name: chunk.name.clone(),
+          arity: 0,
+          chunk,
+          upvalues: 0
+        }
+      )
     ));
 
     self.frames.push(CallFrame {

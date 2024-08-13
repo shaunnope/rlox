@@ -48,6 +48,15 @@ impl Value {
     }
   }
 
+  pub fn copy(&self) -> Self {
+    use Value::*;
+    match self {
+      Boolean(val) => Self::Boolean(*val),
+      Number(val) => Self::Number(*val),
+      Nil => Self::Nil,
+      Object(obj) => Self::Object(obj.clone())
+    }
+  }
 }
 
 impl Debug for Value {

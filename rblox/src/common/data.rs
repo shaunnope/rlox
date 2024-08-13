@@ -55,7 +55,7 @@ impl LoxObject {
   pub fn is_callable(&self) -> bool {
     use LoxObject::*;
     match self {
-      Function(_, _) | Native(_, _) => true,
+      Function(_, _) | Native(_, _) | Closure(_, _) => true,
       _ => false
     }
   }
@@ -70,7 +70,6 @@ impl Display for LoxObject {
       Function(name, n) => write!(f, "<fn {name} {n}>"),
       Native(name, _) => write!(f, "<std {name}>"),
       Closure(name, n) => write!(f, "<fn'{name} {n}>"),
-
     }
   }
 }
@@ -94,6 +93,7 @@ pub struct LoxFunction {
   pub name: String,
   pub arity: usize,
   pub chunk: Chunk,
+  pub upvalues: usize,
 }
 
 impl LoxFunction {
@@ -101,7 +101,8 @@ impl LoxFunction {
     Self {
       name: name.into(),
       arity: 0,
-      chunk: Chunk::new(name)
+      chunk: Chunk::new(name),
+      upvalues: 0
     }
   }
 }
@@ -143,18 +144,31 @@ impl Debug for NativeFunction {
   }
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct LoxClosure {
-  pub fun: Rc<LoxFunction>
+  pub fun: Rc<LoxFunction>,
+  pub upvalues: Vec<LoxUpvalue>
 }
+
 impl LoxClosure {
   pub fn new(func: Rc<LoxFunction>) -> Self {
-    Self { fun: func.clone() }
+    let upvalues = Vec::with_capacity(func.upvalues);
+    Self { fun: func.clone(), upvalues }
   }
 }
 
 impl From<LoxFunction> for LoxClosure {
   fn from(function: LoxFunction) -> Self {
-    Self { fun: Rc::new(function)}
+    let upvalues = Vec::with_capacity(function.upvalues);
+    Self { fun: Rc::new(function), upvalues }
   }
 }
+
+impl Debug for LoxClosure {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "< fn {} ({}) [{}] >", self.fun.name, self.fun.arity, self.fun.upvalues)
+  }
+}
+
+#[derive(Debug)]
+pub struct LoxUpvalue(pub Rc<Value>);

@@ -32,6 +32,8 @@ pub struct Compiler {
   pub fun_type: FunctionType,
   pub locals: Vec<Local>,
   scope_depth: i32,
+  enclosing: Option<Box<RefCell<Compiler>>>,
+  upvalues: Vec<(bool, usize)>,
 }
 
 #[derive(PartialEq)]
@@ -61,6 +63,8 @@ impl Compiler {
       fun_type,
       locals,
       scope_depth: 0,
+      enclosing: None,
+      upvalues: Vec::new()
     }
   }
 
@@ -125,8 +129,7 @@ impl Compiler {
 
   fn add_local(&mut self, name: impl Into<String>, span: Span) -> PResult<()> {
     if self.locals.len() == Self::LOCALS_MAX {
-      return Err(ParseError::Error { 
-        level: ErrorLevel::Error, 
+      return Err(ParseError::StackOverflow { 
         message: "Too many local variables in function".into(), 
         span 
       })
@@ -165,6 +168,60 @@ impl Compiler {
       }
     }
     Ok(None)
+  }
+
+  fn resolve_upvalue(&mut self, name: &str, span: Span) -> PResult<Option<usize>> {
+    let local = if let Some(enc) = &self.enclosing {
+      let mut enc = enc.borrow_mut();
+      if let Some(local) = enc.resolve_local(name)? {
+        Some((true, local))
+      } else if let Some(upv) = enc.resolve_upvalue(name, span)? {
+        Some((false, upv))
+      } else {
+        None
+      }
+    } else {
+      None
+    };
+
+    match local {
+      Some(pair) => Ok(Some(self.add_upvalue(pair, span)?)),
+      None => Ok(None)
+    }
+  }
+
+  fn add_upvalue(&mut self, local: (bool, usize), span: Span) -> PResult<usize> {
+    let count = self.function.upvalues;
+
+    for (off, pair) in self.upvalues.iter().enumerate() {
+      if *pair == local {
+        return Ok(off)
+      }
+    }
+    if count == Self::LOCALS_MAX {
+      return Err(ParseError::StackOverflow { 
+        message: "Too many closure variables in function".into(), 
+        span
+      })
+    }
+
+    self.upvalues.push(local);
+    self.function.upvalues += 1;
+
+    Ok(count)
+  }
+
+  fn bind(&mut self, enclosing: Compiler) {
+    self.enclosing = Some(Box::new(RefCell::new(enclosing)));
+  }
+
+  fn unbind(&mut self) -> Compiler {
+    let enclosing = match self.enclosing.take() {
+      Some(enc) => enc.into_inner(),
+      None => unreachable!("`unbind` should always be called after `bind`.")
+    };
+
+    enclosing
   }
 
 }

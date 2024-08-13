@@ -50,3 +50,21 @@ print clock() - start;";
     eprintln!("{err:?}")
   };
 }
+
+#[test]
+fn can_close_when_upvalues_in_stack() {
+  let source = "fun outer() {
+  var x = \"outside\";
+  fun inner() {
+    print x;
+  }
+  inner();
+}
+outer();";
+
+  let mut vm = VM::new();
+
+  if let Err(err) = vm.run(source) {
+    eprintln!("{err:?}")
+  };
+}
