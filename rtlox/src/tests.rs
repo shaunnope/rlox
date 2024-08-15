@@ -4,6 +4,8 @@ use std::{fs, error::Error, path::Path};
 
 use rtlox::user::run_file;
 
+mod challenges;
+
 const TEST_DIR: &str = "../tests/";
 
 

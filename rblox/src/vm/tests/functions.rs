@@ -1,3 +1,5 @@
+use std::{fs, path::Path};
+
 use super::*;
 
 #[test]
@@ -108,8 +110,33 @@ fun main() {
 }
 
 main();
+globalGet();
 globalSet();
 globalGet();";
+
+  let mut vm = VM::new();
+
+  if let Err(err) = vm.run(source) {
+    eprintln!("{err:?}")
+  };
+}
+
+#[test]
+fn bagel_donut() {
+  let path = Path::new("../custom_tests").join("closures").join("bagel.lox");
+  let source = &fs::read_to_string(path).expect("Could not read file");
+
+  let mut vm = VM::new();
+
+  if let Err(err) = vm.run(source) {
+    eprintln!("{err:?}")
+  };
+}
+
+#[test]
+fn closure_objs() {
+  let path = Path::new("../custom_tests").join("closures").join("class_from_closure.lox");
+  let source = &fs::read_to_string(path).expect("Could not read file");
 
   let mut vm = VM::new();
 

@@ -35,11 +35,6 @@ impl Display for Module {
     for func in self.natives.iter() {
       write!(f, "{:?}, ", func)?;
     }
-    writeln!(f, "\n\n{:=^1$}\n", "| CLOSURES |", PAD)?;
-    for func in self.closures.iter() {
-      writeln!(f, "{:?}", func.borrow())?;
-    }
-
     writeln!(f, "\n{:=^1$}", "", PAD)?;
     Ok(())
   }

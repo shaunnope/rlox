@@ -239,7 +239,12 @@ impl VM {
         },
 
         Closure(n, upvals) => {
-          let closure = self.module.borrow().closures.get(n).unwrap().clone();
+          let closure = LoxClosure::new(
+            self.module.borrow_mut().functions.get(n).unwrap().clone()
+          );
+          let n = self.module.borrow_mut().push(closure);
+
+          let closure = self.module.borrow().closures.last().unwrap().clone();
           let name = closure.borrow().fun.name.clone();
           
           for (is_local, idx) in upvals.iter() {

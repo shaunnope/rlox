@@ -182,12 +182,9 @@ impl Parser<'_> {
       let enclosed = self.compiler.replace(enclosing);
       
       let func = enclosed.function;
-      self.module.borrow_mut().push(func);
+      let func = self.module.borrow_mut().push(func);
 
-      let closure = LoxClosure::new(
-        self.module.borrow_mut().functions.last().unwrap().clone()
-      );
-      (self.module.borrow_mut().push(closure), Rc::new(enclosed.upvalues))
+      (func, Rc::new(enclosed.upvalues))
     };
 
     self.current().emit(Ins::Closure(clos, upvals), span.to(block_span));

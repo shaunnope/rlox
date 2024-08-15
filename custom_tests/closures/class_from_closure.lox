@@ -1,0 +1,38 @@
+fun vector(x, y) {
+  fun obj(first, second) {
+    fun getX() {
+      return x;
+    }
+
+    fun getY() {
+      return y;
+    }
+
+    fun add(other) {
+      return vector(x+other("x", nil), y+other("y", nil) );
+    }
+  
+    if (first == "x") {
+      return getX();
+    }
+
+    if (first == "y") {
+      return getY();
+    }
+
+    if (first == "add") {
+      return add(second);
+    }
+  }
+
+  return obj;
+}
+
+var p1 = vector(0,1);
+print "p1 = " + p1("x", nil) + " " + p1("y", nil);
+
+var p2 = vector(2,3.4);
+print "p2 = " + p2("x", nil) + " " + p2("y", nil);
+
+var p3 = p1("add", p2);
+print "p3 = " + p3("x", nil) + " " + p3("y", nil);
