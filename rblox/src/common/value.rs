@@ -48,6 +48,7 @@ impl Value {
     }
   }
 
+  /// Creates a copy if literal, else clones the LoxObject pointer
   pub fn copy(&self) -> Self {
     use Value::*;
     match self {

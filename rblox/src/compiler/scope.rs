@@ -1,12 +1,13 @@
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::common::{data::{LoxClosure, LoxFunction, NativeFunction}, Span};
+use crate::common::{data::{LoxClosure, LoxFunction, LoxUpvalue, NativeFunction}, Span};
 
 pub struct Local {
   pub name : String,
   pub span: Span,
-  pub depth: i32
+  pub depth: i32,
+  pub captured: bool
 }
 
 #[derive(Debug, Default)]
@@ -14,6 +15,7 @@ pub struct Module {
   pub functions: Vec<Rc<LoxFunction>>,
   pub natives: Vec<Rc<NativeFunction>>,
   pub closures: Vec<Rc<RefCell<LoxClosure>>>,
+  pub upvals: Vec<Rc<RefCell<LoxUpvalue>>>
 }
 
 impl Module {

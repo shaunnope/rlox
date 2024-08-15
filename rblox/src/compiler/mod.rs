@@ -47,7 +47,7 @@ impl Compiler {
   const LOCALS_MIN: usize = 128;
   const LOCALS_MAX: usize = 512;
   pub fn new() -> Self {
-    Self::build("<main>", FunctionType::Script)
+    Self::build("<script>", FunctionType::Script)
   }
 
   fn build(name: &str, fun_type: FunctionType) -> Self {
@@ -55,7 +55,8 @@ impl Compiler {
     locals.push(Local {
       name: name.into(),
       span: Span::new(0,0,0),
-      depth: 0
+      depth: 0,
+      captured: false
     });
 
     Self {
@@ -76,16 +77,28 @@ impl Compiler {
     self.scope_depth += 1;
   }
 
-  fn end_scope(&mut self) -> usize {
+  fn end_scope(&mut self, span: Span) {
     self.scope_depth -= 1;
 
     let mut pops = 0;
     while self.locals.len() > 0 && 
     self.locals.last().unwrap().depth > self.scope_depth {
+      if self.locals.last().unwrap().captured {
+        if pops > 0 {
+          self.emit(Ins::PopN(pops), span);
+          pops = 0;
+        }
+        self.emit(Ins::CloseUpval, span);
+
+      } else {
       pops += 1;
+      }
       self.locals.pop();
     }
-    pops
+
+    if pops > 0 {
+      self.emit(Ins::PopN(pops), span);
+    }
   }
 
   fn declare_variable(&mut self, ident: &LoxObject, span: Span) -> PResult<()> {
@@ -138,7 +151,8 @@ impl Compiler {
     self.locals.push(Local {
       name: name.into(),
       span,
-      depth: -1
+      depth: -1,
+      captured: false
     });
 
     Ok(())
@@ -154,8 +168,7 @@ impl Compiler {
     if self.locals.len() == 0 {
       return Ok(None)
     }
-    for i in (0..self.locals.len()).rev() {
-      let local = &self.locals[i];
+    for (i, local) in self.locals.iter().enumerate().rev() {
       if name == local.name {
         if local.depth == -1 {
           return Err(ParseError::Error { 
@@ -185,7 +198,18 @@ impl Compiler {
     };
 
     match local {
-      Some(pair) => Ok(Some(self.add_upvalue(pair, span)?)),
+      Some((is_loc, idx)) => {
+        if is_loc {
+          if let Some(enc) = &self.enclosing {
+            let mut enc = enc.as_ref().borrow_mut();
+            let val = enc.locals.get_mut(idx).unwrap();
+            val.captured = true;
+          } else {
+            unreachable!("Enclosing compiler should exist since `is_loc` is true")
+          };
+        }
+        Ok(Some(self.add_upvalue((is_loc, idx), span)?))
+      },
       None => Ok(None)
     }
   }

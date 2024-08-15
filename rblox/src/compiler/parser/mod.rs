@@ -177,6 +177,7 @@ impl Parser<'_> {
 
     
     let (clos, upvals) = {
+      self.emit_return();
       let enclosing = self.compiler.borrow_mut().unbind();
       let enclosed = self.compiler.replace(enclosing);
       
@@ -205,7 +206,7 @@ impl Parser<'_> {
       LeftBrace => {
         self.current().begin_scope();
         let span = self.parse_block()?;
-        self.end_scope(span);
+        self.current().end_scope(span);
         Ok(())
       },
       If => self.parse_if_stmt(),
@@ -361,7 +362,7 @@ impl Parser<'_> {
       self.current().emit(Ins::Pop, span);
     }
 
-    self.current().end_scope();
+    self.current().end_scope(span);
     Ok(())
   }
 
@@ -898,11 +899,6 @@ impl Parser<'_> {
   #[inline]
   fn current(&mut self) -> RefMut<Compiler> {
     self.compiler.borrow_mut()
-  }
-
-  fn end_scope(&mut self, span: Span) {
-    let count = self.current().end_scope();
-    self.current().emit(Ins::PopN(count), span);
   }
 
   /// Emit an implicit return `nil` at the end of a function body

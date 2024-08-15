@@ -90,7 +90,7 @@ impl VM {
       };
 
       // if cfg!(features = "debug-step") {
-      //   if cfg!(debug_assertions) {
+      // if cfg!(debug_assertions) {
       //   display_instr(&self.stack, &inst);
       // }
       let mut jumped = false;
@@ -215,12 +215,22 @@ impl VM {
         }
 
         GetUpval(slot) => {
-          let val = self.get_upvalue(slot).copy();
+          use LoxUpvalue::*;
+          let val = self.get_upvalue(slot);
+          let val = match &*val.borrow() {
+            Open(pos) => self.stack.get(*pos).unwrap().clone(),
+            Closed(val) => val.copy()
+          };
+
           self.push(val)?;
         },
         SetUpval(slot) => {
-          let val = self.peek(0).unwrap().clone();
+          let val = self.peek(0).unwrap().copy();
           self.set_upvalue(slot, val);
+        }
+        CloseUpval => {
+          self.close_upvals(self.frames.last().unwrap().start, self.stack.len()-1);
+          self.pop();
         }
 
 
@@ -229,16 +239,14 @@ impl VM {
         },
 
         Closure(n, upvals) => {
-          let func = self.module.clone().borrow_mut()
-            .functions.get(n).unwrap().clone();
-          let name = func.name.clone();
           let closure = self.module.borrow().closures.get(n).unwrap().clone();
+          let name = closure.borrow().fun.name.clone();
           
           for (is_local, idx) in upvals.iter() {
             let upval = if *is_local {
               self.capture_upval(*idx)?
             } else {
-              LoxUpvalue(self.get_upvalue(*idx))
+              self.get_upvalue(*idx)
             };
 
             closure.borrow_mut().upvalues.push(upval);
@@ -264,7 +272,7 @@ impl VM {
           if self.frames.len() == 0 {
             return Ok(())
           }
-
+          self.close_upvals(frame.start, frame.start);
           self.pop_to(frame.start);
           self.push(result)?;
 
@@ -353,11 +361,6 @@ impl VM {
     Ok(())
   }
 
-  fn capture_upval(&mut self, idx: usize) -> Result<LoxUpvalue, RuntimeError> {
-    let val = self.get(idx).clone();
-    Ok(LoxUpvalue(Rc::new(val)))
-  }
-
 }
 
 /// Stack operations
@@ -426,17 +429,75 @@ impl VM {
   }
 
   /// Get upvalue in top frame
-  fn get_upvalue(&mut self, slot: usize) -> Rc<Value> {
+  fn get_upvalue(&mut self, slot: usize) -> Rc<RefCell<LoxUpvalue>> {
     let frame = self.frames.last().unwrap();
-    frame.function.borrow().upvalues.get(slot).unwrap().0.clone()
+    frame.function.borrow().upvalues.get(slot).unwrap().clone()
   }
 
   /// Set indexed upvalue to a value
   fn set_upvalue(&mut self, slot: usize, value: Value) {
-    let mut fun = self.frames.last_mut().unwrap().function.borrow_mut();
-    let upval = fun.upvalues.get_mut(slot).unwrap();
+    let fun = self.frames.last_mut().unwrap().function.borrow_mut();
     
-    *upval = LoxUpvalue(Rc::new(value))
+    // if Open, update stack, else, update upval.
+    let mut upval = fun.upvalues.get(slot).unwrap().borrow_mut();
+    let updated = match &*upval {
+      LoxUpvalue::Open(pos) => {
+        let val = self.stack.get_mut(*pos).unwrap();
+        *val = value;
+        return;
+      },
+      LoxUpvalue::Closed(_) => LoxUpvalue::from(value)
+    };
+
+    *upval = updated
+
+  }
+
+  /// Capture local variable as an upvalue.
+  /// 
+  /// If stack slot has already been captured as an upvalue, return the reference to that upvalue.
+  /// Otherwise, create a new upvalue.
+  fn capture_upval(&mut self, idx: usize) -> Result<Rc<RefCell<LoxUpvalue>>, RuntimeError> {
+    // let val = self.get(idx).clone();
+    let slot = self.frames.last().unwrap().start + idx;
+    // let mut prev = None;
+
+    for upval in self.module.borrow().upvals.iter().rev() {
+      let upv = upval.borrow();
+      match &*upv {
+        LoxUpvalue::Open(pos) => {
+          if *pos == slot { return Ok(upval.clone())}
+          if *pos < slot { break; }
+          // prev = Some(upval.clone());
+        }
+        LoxUpvalue::Closed(_) => continue,
+      }
+    };
+
+    let upval = Rc::new(RefCell::new(LoxUpvalue::from(slot)));
+    // TODO: insert in sorted order?
+    self.module.borrow_mut().upvals.push(upval.clone());
+
+    Ok(upval)
+  }
+
+  fn close_upvals(&mut self, start: usize, last: usize) {
+    assert!(last < self.stack.len());
+    assert!(start <= last);
+    let last = last - start;
+
+    for upval in self.module.borrow_mut().upvals.iter_mut().rev() {
+      let closed = match &*upval.borrow() {
+        LoxUpvalue::Open(slot) if *slot >= last => {
+          let val = self.stack.get(*slot).unwrap().clone();
+          LoxUpvalue::from(val)
+        }
+        _ => continue
+      };
+      let mut upval = upval.borrow_mut();
+      *upval = closed;
+    }
+
   }
 
   /// Advance ip

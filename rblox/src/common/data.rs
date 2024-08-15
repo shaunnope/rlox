@@ -1,4 +1,4 @@
-use std::{fmt::{Debug, Display}, mem, rc::Rc};
+use std::{cell::RefCell, fmt::{Debug, Display}, mem, rc::Rc};
 
 use crate::{
   common::{
@@ -13,7 +13,7 @@ use crate::{
   }, vm::error::RuntimeError
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum LoxObject {
   Identifier(String),
   String(String),
@@ -61,15 +61,25 @@ impl LoxObject {
   }
 }
 
-impl Display for LoxObject {
+impl Debug for LoxObject {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     use LoxObject::*;
     match self {
       Identifier(s) => write!(f, "{s}"),
-      String(s) => write!(f, "{s}"),
+      String(s) => write!(f, "\"{s}\""),
       Function(name, n) => write!(f, "<fn {name} {n}>"),
       Native(name, _) => write!(f, "<std {name}>"),
       Closure(name, n) => write!(f, "<fn'{name} {n}>"),
+    }
+  }
+}
+
+impl Display for LoxObject {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    use LoxObject::*;
+    match self {
+      String(s) => write!(f, "{s}"),
+      other =>  write!(f, "{:?}", other),
     }
   }
 }
@@ -147,7 +157,7 @@ impl Debug for NativeFunction {
 // #[derive(Debug)]
 pub struct LoxClosure {
   pub fun: Rc<LoxFunction>,
-  pub upvalues: Vec<LoxUpvalue>
+  pub upvalues: Vec<Rc<RefCell<LoxUpvalue>>>
 }
 
 impl LoxClosure {
@@ -166,9 +176,36 @@ impl From<LoxFunction> for LoxClosure {
 
 impl Debug for LoxClosure {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "< fn {} ({}) [{}] >", self.fun.name, self.fun.arity, self.fun.upvalues)
+    write!(f, "<fn {} ({}) [{}]>", self.fun.name, self.fun.arity, self.fun.upvalues)
   }
 }
 
-#[derive(Debug)]
-pub struct LoxUpvalue(pub Rc<Value>);
+
+
+#[derive(Debug, Clone)]
+/// Run-time representation of upvalues.
+pub enum LoxUpvalue {
+  Open(usize),
+  Closed(Value)
+}
+
+impl LoxUpvalue {
+  pub fn _copy(&self) -> Rc<RefCell<Self>> {
+    match self {
+      Self::Open(pos) => Rc::new(RefCell::new(Self::Open(*pos))),
+      Self::Closed(val) => Rc::new(RefCell::new(Self::Closed(val.clone()))),
+    }
+  }
+}
+
+impl From<usize> for LoxUpvalue {
+  fn from(value: usize) -> Self {
+    Self::Open(value)
+  }
+}
+
+impl From<Value> for LoxUpvalue {
+  fn from(value: Value) -> Self {
+    Self::Closed(value)
+  }
+}

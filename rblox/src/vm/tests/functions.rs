@@ -52,7 +52,7 @@ print clock() - start;";
 }
 
 #[test]
-fn can_close_when_upvalues_in_stack() {
+fn closure_in_stack() {
   let source = "fun outer() {
   var x = \"outside\";
   fun inner() {
@@ -61,6 +61,55 @@ fn can_close_when_upvalues_in_stack() {
   inner();
 }
 outer();";
+
+  let mut vm = VM::new();
+
+  if let Err(err) = vm.run(source) {
+    eprintln!("{err:?}")
+  };
+}
+
+#[test]
+fn closure_off_stack() {
+  let source = "fun outer() {
+  var x = \"outside\";
+  fun inner() {
+    print x;
+  }
+  x = \"changed\";
+
+  return inner;
+}
+var x = \"global\";
+var closure = outer();
+closure();";
+
+  let mut vm = VM::new();
+
+  if let Err(err) = vm.run(source) {
+    eprintln!("{err:?}")
+  };
+}
+
+#[test]
+fn closure_variables() {
+  let source = 
+"var globalSet;
+var globalGet;
+
+fun main() {
+  var a = \"initial\";
+
+  fun set() { a = \"updated\"; }
+  fun get() { print a; }
+
+  globalSet = set;
+  globalGet = get;
+}
+
+main();
+globalSet();
+globalGet();";
 
   let mut vm = VM::new();
 

@@ -23,6 +23,7 @@ pub enum Ins {
 
   GetUpval(usize),
   SetUpval(usize),
+  CloseUpval,
 
   Call(usize),
   Closure(usize, Rc<Vec<(bool, usize)>>),
@@ -65,6 +66,7 @@ impl Debug for Ins {
 
       GetUpval(var) => write!(f, "{:PAD$}{var}", "OP_GET_UPV"),
       SetUpval(var) => write!(f, "{:PAD$}{var}", "OP_SET_UPV"),
+      CloseUpval => write!(f, "OP_CLOSE_UPV"),
 
       Call(args) => write!(f, "{:PAD$}{args}", "OP_CALL"),
       Closure(n, upvals) => {
