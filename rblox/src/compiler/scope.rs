@@ -1,7 +1,7 @@
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use crate::common::{data::{LoxClosure, LoxFunction, LoxUpvalue, NativeFunction}, Span};
+use crate::common::{data::{LoxClosure, LoxFunction, LoxUpvalue, NativeFunction, Push}, Span};
 
 pub struct Local {
   pub name : String,
@@ -38,10 +38,6 @@ impl Display for Module {
     writeln!(f, "\n{:=^1$}", "", PAD)?;
     Ok(())
   }
-}
-
-pub trait Push<T> {
-  fn push(&mut self, obj: T) -> usize;
 }
 
 impl Push<LoxFunction> for Module {

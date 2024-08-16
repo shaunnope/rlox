@@ -14,7 +14,7 @@ pub enum RuntimeError {
   UndefinedVariable { name: String, span: Span },
   // UndefinedProperty { ident: LoxIdent },
   ZeroDivision(Span),
-  EmptyStack(Span),
+  // EmptyStack(Span),
   StackOverflow(Span) // TODO: distinguish between call stack and vm stack
 }
 
@@ -43,12 +43,12 @@ impl Display for RuntimeError {
       // }
 
       ZeroDivision(span) => {
-        write!(f, "Can not divide by zero; at position {}", span)
+        write!(f, "Division by zero; at position {}", span)
       },
 
-      EmptyStack(span) => {
-        write!(f, "Cannot pop from an empty stack; at position {}", span)
-      },
+      // EmptyStack(span) => {
+      //   write!(f, "Cannot pop from an empty stack; at position {}", span)
+      // },
       StackOverflow(span) => {
         write!(f, "stack overflow; at position {}", span)
       }
@@ -64,7 +64,7 @@ impl RuntimeError {
       UnsupportedType { span, .. } 
       | UndefinedVariable { span, ..}
       | ZeroDivision(span) 
-      | EmptyStack(span)
+      // | EmptyStack(span)
       | StackOverflow(span)
       => *span,
       // UndefinedProperty { ident }=> ident.span,
@@ -79,8 +79,8 @@ impl LoxError for RuntimeError {
     use RuntimeError::*;
     match self {
       UnsupportedType {level, ..} => level.clone(),
-      ZeroDivision(_)
-      | EmptyStack(_)
+      ZeroDivision(_) => ErrorLevel::Warning,
+      // EmptyStack(_)
       | StackOverflow(_)
       | UndefinedVariable {..}
       => ErrorLevel::Error,

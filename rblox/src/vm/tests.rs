@@ -2,6 +2,7 @@ use super::*;
 
 use crate::common::Span;
 
+mod arithmetic;
 mod challenges;
 mod variables;
 mod sequence;

@@ -13,6 +13,10 @@ use crate::{
   }, vm::error::RuntimeError
 };
 
+pub trait Push<T> {
+  fn push(&mut self, obj: T) -> usize;
+}
+
 #[derive(Clone, PartialEq)]
 pub enum LoxObject {
   Identifier(String),

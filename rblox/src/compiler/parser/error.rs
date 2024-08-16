@@ -43,7 +43,7 @@ pub enum ParseError {
     span: Span 
   },
 
-  DetectedLambda,
+  _DetectedLambda,
 }
 
 impl Display for ParseError {
@@ -75,7 +75,7 @@ impl Display for ParseError {
 
       InvalidJump { message, span } => write!(f, "illegal jump - {message}; at position {span}"),
 
-      DetectedLambda => unreachable!(),
+      _DetectedLambda => unreachable!(),
     }
   }
 }
@@ -110,17 +110,18 @@ impl ParseError {
       StackOverflow { span, .. }
       => *span,
       UnexpectedToken { offending, .. } => offending.span,
-      DetectedLambda => unreachable!(),
+      _DetectedLambda => unreachable!(),
     }
   }
 
+  #[allow(dead_code)]
   /// Checks if the error allows REPL continuation (aka. "..." prompt).
   pub fn allows_continuation(&self) -> bool {
     use ParseError::*;
     match self {
       UnexpectedToken { offending, .. } if offending.kind == TokenType::EOF => true,
       ScanError { error, .. } if error.allows_continuation() => true,
-      DetectedLambda => unreachable!(),
+      _DetectedLambda => unreachable!(),
       _ => false,
     }
   }

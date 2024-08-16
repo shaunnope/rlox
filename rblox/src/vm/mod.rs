@@ -2,10 +2,10 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
   common::{
-    data::{LoxClosure, LoxObject, LoxUpvalue}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
+    data::{LoxClosure, LoxObject, LoxUpvalue, Push}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
     Ins, Span, Value
   }, 
-  compiler::{compile, scope::{Module, Push}, FunctionType},
+  compiler::{compile, scope::Module, FunctionType},
   gc::mmap::MemManager,
   vm::error::RuntimeError
 };
@@ -152,7 +152,32 @@ impl VM {
         },
         Subtract => bin_num_op!(self, -),
         Multiply => bin_num_op!(self, *),
-        Divide => bin_num_op!(self, /), // TODO:  Raise ZeroDivision error
+        Divide => {
+          let b = self.pop();
+          let a = self.pop();
+
+          use Value::*;
+          let out = match (a, b) {
+            (Number(a), Number(b)) => {
+              if b == 0.0 {
+                let warn = RuntimeError::ZeroDivision(self.span);
+                warn.report();
+              }
+              Number(a / b)
+            },
+            (a, b) => return Err(RuntimeError::UnsupportedType {
+              level: ErrorLevel::Error,
+              message: format!(
+                "Binary `/` operator can only operate over two numbers. \
+                Got types `{}` and `{}`",
+                a.type_name(),
+                b.type_name()
+              ),
+              span,
+            })
+          };
+          self.push(out)?;          
+        }, // TODO:  Raise ZeroDivision error
 
         Equal => {
           let a = self.pop();
@@ -554,7 +579,7 @@ impl VM {
 
 }
 
-// #[allow(dead_code)]
+#[allow(dead_code)]
 fn display_instr(stack: &[Value], inst: &Ins) {
   print!("[ ");
   for slot in stack.iter() {

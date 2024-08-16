@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-  common::{data::{LoxObject, NativeFunction}, Value},
-  compiler::scope::{Module, Push},
+  common::{data::{LoxObject, NativeFunction, Push}, Value},
+  compiler::scope::Module,
   vm::{error::RuntimeError, VM}
 };
 
