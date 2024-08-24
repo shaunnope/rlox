@@ -132,7 +132,7 @@ impl<T> Push<T> for Gc<T> {
 
 #[derive(Default)]
 pub struct Module {
-  pub functions: Vec<Gcc<LoxFunction>>,
+  pub functions: Gc<LoxFunction>,
   pub natives: Vec<Rc<NativeFunction>>,
   pub closures: Gc<LoxClosure>,
   pub upvals: Gc<RefCell<LoxUpvalue>>,
@@ -189,10 +189,7 @@ impl Display for Module {
     const PAD: usize = 31;
     writeln!(f, "{:=^1$}", "| FUNCTIONS |", PAD)?;
     for func in self.functions.iter() {
-      match func {
-        None => writeln!(f, "{:?}", func)?,
-        Some(inner) => writeln!(f, "{:?}", inner)?,
-      }
+      writeln!(f, "{:?}", func)?;
     }
     writeln!(f, "{:=^1$}", "| NATIVES |", PAD)?;
     for func in self.natives.iter() {
@@ -218,8 +215,7 @@ impl Push<Rc<LoxObject>> for Module {
 
 impl Push<LoxFunction> for Module {
   fn push(&mut self, func: LoxFunction) -> usize {
-    self.functions.push(Some(Rc::new(func)));
-    self.functions.len() - 1
+    self.functions.push(func)
   }
 }
 

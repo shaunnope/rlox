@@ -40,7 +40,6 @@ pub struct VM {
   frames: Vec<CallFrame>,
   stack: Vec<Value>,
   globals: HashMap<String, Value>,
-  // objects: MemManager,
   span: Span,
   module: Module
 }
@@ -61,7 +60,7 @@ impl VM {
       println!("{}", self.module);
     }
     
-    let main = self.module.functions.last().unwrap().clone().unwrap();
+    let main = self.module.functions.last().unwrap().clone();
 
     self.frames.push(CallFrame { 
       function: Rc::new(LoxClosure::new(main)),
@@ -265,10 +264,9 @@ impl VM {
 
         Closure(n, upvals) => {
           let mut closure = LoxClosure::new(
-            self.module.functions.get(n).unwrap().clone().unwrap()
+            self.module.functions.get(n).unwrap().clone()
           );
           
-          // let closure = self.module.closures.last().unwrap().clone();
           let name = closure.fun.name.clone();
           
           for (is_local, idx) in upvals.iter() {
