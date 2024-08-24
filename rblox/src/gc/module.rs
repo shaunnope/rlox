@@ -1,11 +1,11 @@
-use std::{any::Any, cell::RefCell, collections::{BinaryHeap, HashMap}, fmt::{Debug, Display}, rc::Rc};
+use std::{cell::RefCell, collections::{BinaryHeap, HashMap}, fmt::{Debug, Display}, rc::Rc};
 
 use crate::{
   common::data::{
     LoxClosure, LoxFunction, LoxObject, LoxUpvalue, NativeFunction
   }, 
   gc::data::{
-    Allocated, Iter, IterMut, Push
+    Iter, IterMut, Push
   }
 };
 
@@ -134,16 +134,13 @@ impl<T> Push<T> for Gc<T> {
 pub struct Module {
   pub functions: Vec<Gcc<LoxFunction>>,
   pub natives: Vec<Rc<NativeFunction>>,
-  pub closures: Gc<RefCell<LoxClosure>>,
+  pub closures: Gc<LoxClosure>,
   pub upvals: Gc<RefCell<LoxUpvalue>>,
   objects: Vec<Rc<LoxObject>>,
   strings: HashMap<String, Rc<LoxObject>>
 }
 
 impl Module {
-  pub fn new() -> Rc<RefCell<Self>> {
-    Rc::new(RefCell::new(Self::default()))
-  }
 
   pub fn alloc_obj(&mut self, obj: Rc<LoxObject>) -> Rc<LoxObject> {
     if let LoxObject::String(str) = &*obj {
@@ -154,7 +151,7 @@ impl Module {
     }
   }
 
-  pub fn  add_string(&mut self, str: &str) -> Rc<LoxObject> {
+  pub fn add_string(&mut self, str: &str) -> Rc<LoxObject> {
     match self.strings.get(str) {
       Some(obj) => obj.clone(),
       None => {
@@ -235,7 +232,7 @@ impl Push<NativeFunction> for Module {
 
 impl Push<LoxClosure> for Module {
   fn push(&mut self, func: LoxClosure) -> usize {
-    self.closures.push(RefCell::new(func))
+    self.closures.push(func)
   }
 
 }
