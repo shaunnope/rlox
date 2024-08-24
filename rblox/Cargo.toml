@@ -3,3 +3,7 @@ name = "rblox"
 version = "0.1.0"
 edition = "2021"
 default-run = "rblox"
+
+[features]
+dbg-gc = []
+dbg-step = []

@@ -2,20 +2,14 @@ use std::{cell::RefCell, fmt::{Debug, Display}, mem, rc::Rc};
 
 use crate::{
   common::{
-    Chunk, 
-    error::ErrorLevel,
-    Span,
-    Value
-  },
-  compiler::{
+    error::ErrorLevel, Chunk, Span, Value
+  }, compiler::{
     parser::error::ParseError,
     scanner::token::{Token, TokenType}
-  }, vm::error::RuntimeError
+  }, gc::data::Allocated, vm::error::RuntimeError
 };
 
-pub trait Push<T> {
-  fn push(&mut self, obj: T) -> usize;
-}
+// pub mod iter;
 
 #[derive(Clone, PartialEq)]
 pub enum LoxObject {
@@ -158,7 +152,6 @@ impl Debug for NativeFunction {
   }
 }
 
-// #[derive(Debug)]
 pub struct LoxClosure {
   pub fun: Rc<LoxFunction>,
   pub upvalues: Vec<Rc<RefCell<LoxUpvalue>>>
@@ -184,6 +177,7 @@ impl Debug for LoxClosure {
   }
 }
 
+impl Allocated for LoxClosure {}
 
 
 #[derive(Debug, Clone)]
@@ -213,3 +207,5 @@ impl From<Value> for LoxUpvalue {
     Self::Closed(value)
   }
 }
+
+impl Allocated for LoxUpvalue {}

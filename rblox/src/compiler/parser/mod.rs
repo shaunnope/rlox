@@ -7,7 +7,7 @@ use rules::ParseFn;
 
 use crate::{
   common::{
-    data::{LoxObject, Push}, 
+    data::LoxObject, 
     error::{ErrorLevel, LoxError}, 
     Ins, Span
   },
@@ -20,8 +20,11 @@ use crate::{
     scanner::{
       token::{Token, TokenType}, Scanner
     }, 
-    scope::Module,
     Compiler, FunctionType
+  },
+  gc::{
+    data::Push,
+    Module
   }
 };
 

@@ -2,11 +2,14 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
   common::{
-    data::{LoxClosure, LoxObject, LoxUpvalue, Push}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
+    data::{LoxClosure, LoxObject, LoxUpvalue}, error::{ErrorLevel, ErrorType, LoxError, LoxResult}, 
     Ins, Span, Value
   }, 
-  compiler::{compile, scope::Module, FunctionType},
-  gc::mmap::MemManager,
+  compiler::{compile, FunctionType},
+  gc::{
+    data::Push,
+    MemManager, Module
+  },
   vm::error::RuntimeError
 };
 
@@ -61,7 +64,7 @@ impl VM {
       println!("{}", self.module.borrow());
     }
     
-    let main = self.module.clone().borrow_mut().functions.last().unwrap().clone();
+    let main = self.module.clone().borrow_mut().functions.last().unwrap().clone().unwrap();
 
     self.frames.push(CallFrame { 
       function: Rc::new(RefCell::new(LoxClosure::new(main))),
@@ -89,7 +92,7 @@ impl VM {
         Some(res) => res
       };
 
-      // if cfg!(features = "debug-step") {
+      // if cfg!(feature = "dbg-step") {
       // if cfg!(debug_assertions) {
       //   display_instr(&self.stack, &inst);
       // }
@@ -265,7 +268,7 @@ impl VM {
 
         Closure(n, upvals) => {
           let closure = LoxClosure::new(
-            self.module.borrow_mut().functions.get(n).unwrap().clone()
+            self.module.borrow_mut().functions.get(n).unwrap().clone().unwrap()
           );
           let n = self.module.borrow_mut().push(closure);
 
@@ -345,7 +348,7 @@ impl VM {
 
     match kind {
       F::Function => {
-        let function = self.module.clone().borrow_mut().closures.get(idx).unwrap().clone();
+        let function = self.module.clone().borrow_mut().closures.get(idx).unwrap();
 
         self.call(function, args)?;
       },
@@ -403,12 +406,12 @@ impl VM {
       frames: Vec::new(),
       stack: Vec::with_capacity(Self::STACK_MIN),
       globals: HashMap::new(),
-      objects: MemManager::new(),
+      objects: MemManager::default(),
       span: Span::new(0, 0, 0),
       module: Module::new()
     };
 
-    vm.stack.push(Value::Object(Rc::new(LoxObject::Function("<main>".into(), 0))));
+    vm.stack.push(Value::Object(Rc::new(LoxObject::Function("<script>".into(), 0))));
 
     attach(&mut vm);
     vm
@@ -419,6 +422,17 @@ impl VM {
     if self.stack.len() == Self::STACK_MAX {
       return Err(RuntimeError::StackOverflow(self.span))
     }
+
+    let value = if let Value::Object(obj) = &value {
+      if let LoxObject::String(str) = &**obj {
+        Value::Object(self.objects.add_string(str))
+      } else {
+        value
+      }
+    } else {
+      value
+    };
+
     self.stack.push(value);
     Ok(())
   }
@@ -488,17 +502,13 @@ impl VM {
   /// If stack slot has already been captured as an upvalue, return the reference to that upvalue.
   /// Otherwise, create a new upvalue.
   fn capture_upval(&mut self, idx: usize) -> Result<Rc<RefCell<LoxUpvalue>>, RuntimeError> {
-    // let val = self.get(idx).clone();
     let slot = self.frames.last().unwrap().start + idx;
-    // let mut prev = None;
 
-    for upval in self.module.borrow().upvals.iter().rev() {
-      let upv = upval.borrow();
-      match &*upv {
+    for upval in self.module.borrow().upvals.iter() {
+      match &*upval.borrow() {
         LoxUpvalue::Open(pos) => {
           if *pos == slot { return Ok(upval.clone())}
           if *pos < slot { break; }
-          // prev = Some(upval.clone());
         }
         LoxUpvalue::Closed(_) => continue,
       }
@@ -516,7 +526,7 @@ impl VM {
     assert!(start <= last);
     let last = last - start;
 
-    for upval in self.module.borrow_mut().upvals.iter_mut().rev() {
+    for upval in self.module.borrow_mut().upvals.iter_mut() {
       let closed = match &*upval.borrow() {
         LoxUpvalue::Open(slot) if *slot >= last => {
           let val = self.stack.get(*slot).unwrap().clone();

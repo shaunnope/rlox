@@ -2,28 +2,24 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::common::data::LoxObject;
 
-
+#[derive(Default)]
 pub struct MemManager {
   objects: Vec<Rc<LoxObject>>,
   strings: HashMap<String, Rc<LoxObject>>
 }
 
 impl MemManager {
-  pub fn new() -> Self {
-    Self {
-      objects: Vec::new(),
-      strings: HashMap::new()
+  pub fn alloc_obj(&mut self, obj: Rc<LoxObject>) -> Rc<LoxObject> {
+    if let LoxObject::String(str) = &*obj {
+      self.add_string(str)
+    } else {
+      self.push(obj.clone());
+      obj
     }
   }
 
-  pub fn _alloc_obj(&mut self, obj: LoxObject) -> Rc<LoxObject> {
-    let obj = Rc::new(obj);
-    self._push(&obj);
-    obj
-  }
-
-  pub fn _push(&mut self, obj: &Rc<LoxObject>) {
-    self.objects.push(obj.clone());
+  pub fn push(&mut self, obj: Rc<LoxObject>) {
+    self.objects.push(obj);
   }
 
   pub fn add_string(&mut self, str: &str) -> Rc<LoxObject> {
@@ -33,7 +29,7 @@ impl MemManager {
         let obj = Rc::new(LoxObject::String(str.into()));
         
         self.strings.insert(str.into(), obj.clone());
-        self.objects.push(obj.clone());
+        self.push(obj.clone());
         
         obj
       }

@@ -134,7 +134,7 @@ fn bagel_donut() {
 }
 
 #[test]
-fn closure_objs() {
+fn objs() {
   let path = Path::new("../custom_tests").join("closures").join("class_from_closure.lox");
   let source = &fs::read_to_string(path).expect("Could not read file");
 

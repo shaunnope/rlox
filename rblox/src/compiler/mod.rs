@@ -1,8 +1,6 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use scope::Module;
-
 use crate::{
   common::{data::{LoxFunction, LoxObject}, error::ErrorLevel, Chunk, Ins, Span},
   compiler::{
@@ -11,7 +9,8 @@ use crate::{
       PResult, Parser, ParserOutcome
     },
     scope::Local
-  }
+  },
+  gc::Module
 };
 
 #[cfg(test)]
