@@ -6,10 +6,7 @@ use crate::{
     Ins, Span, Value
   }, 
   compiler::{compile, FunctionType},
-  gc::{
-    data::Push,
-    MemManager, Module
-  },
+  gc::{data::Push, Module},
   vm::error::RuntimeError
 };
 
@@ -43,7 +40,7 @@ pub struct VM {
   frames: Vec<CallFrame>,
   stack: Vec<Value>,
   globals: HashMap<String, Value>,
-  objects: MemManager,
+  // objects: MemManager,
   span: Span,
   module: Module
 }
@@ -132,7 +129,7 @@ impl VM {
             => {
               match &*a {
                 L::String(a) => {
-                  let obj = self.objects.add_string(
+                  let obj = self.module.add_string(
                     &(a.to_owned() + &b.to_string())
                   );
                   Object(obj)
@@ -406,7 +403,7 @@ impl VM {
       frames: Vec::new(),
       stack: Vec::with_capacity(Self::STACK_MIN),
       globals: HashMap::new(),
-      objects: MemManager::default(),
+      // objects: MemManager::default(),
       span: Span::new(0, 0, 0),
       module: Module::default()
     };
@@ -425,7 +422,7 @@ impl VM {
 
     let value = if let Value::Object(obj) = &value {
       if let LoxObject::String(str) = &**obj {
-        Value::Object(self.objects.add_string(str))
+        Value::Object(self.module.add_string(str))
       } else {
         value
       }
