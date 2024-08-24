@@ -23,7 +23,7 @@ pub fn attach(vm: &mut VM) {
     }
   );
 
-  vm.module = Rc::new(RefCell::new(module));
+  vm.module = module;
 }
 
 macro_rules! def_native {

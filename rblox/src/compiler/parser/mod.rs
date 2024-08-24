@@ -45,7 +45,7 @@ pub struct Parser<'src> {
   diagnostics: Vec<ParseError>,
   pub _options: ParserOptions,
   compiler: RefCell<Compiler>,
-  module: Rc<RefCell<Module>>
+  module: &'src mut Module
 }
 
 impl Parser<'_> {
@@ -55,7 +55,7 @@ impl Parser<'_> {
     self.emit_return();
 
     let main = self.compiler.into_inner().function;
-    self.module.borrow_mut().push(main);
+    self.module.push(main);
     self.diagnostics
   }
 
@@ -185,7 +185,7 @@ impl Parser<'_> {
       let enclosed = self.compiler.replace(enclosing);
       
       let func = enclosed.function;
-      let func = self.module.borrow_mut().push(func);
+      let func = self.module.push(func);
 
       (func, Rc::new(enclosed.upvalues))
     };
@@ -691,7 +691,7 @@ impl Parser<'_> {
 // The parser helper methods.
 impl<'src> Parser<'src> {
   /// Creates a new parser.
-  pub fn new(src: &'src str, module: Rc<RefCell<Module>>) -> Self {
+  pub fn new(src: &'src str, module: &'src mut Module) -> Self {
     let mut parser = Self {
       scanner: Scanner::new(src),
       current_token: Token::dummy(),

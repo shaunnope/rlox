@@ -1,5 +1,5 @@
 
-use std::{cell::RefCell, rc::Rc};
+use std::cell::RefCell;
 
 use crate::{
   common::{data::{LoxFunction, LoxObject}, error::ErrorLevel, Chunk, Ins, Span},
@@ -21,7 +21,7 @@ pub mod parser;
 
 pub mod scope;
 
-pub fn compile(src: &str, module: Rc<RefCell<Module>>) -> ParserOutcome {
+pub fn compile(src: &str, module: &mut Module) -> ParserOutcome {
   let parser = Parser::new(src, module);
   parser.parse()
 }
