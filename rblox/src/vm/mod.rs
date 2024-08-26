@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
   common::{
@@ -6,7 +6,7 @@ use crate::{
     Ins, Span, Value
   }, 
   compiler::{compile, FunctionType},
-  gc::{data::Push, Module},
+  gc::{data::{RefCell, Push}, Module},
   vm::error::RuntimeError
 };
 
@@ -522,7 +522,7 @@ impl VM {
     assert!(start <= last);
     let last = last - start;
 
-    for upval in self.module.upvals.iter_mut() {
+    for upval in self.module.upvals.iter() {
       let closed = match &*upval.borrow() {
         LoxUpvalue::Open(slot) if *slot >= last => {
           let val = self.stack.get(*slot).unwrap().clone();

@@ -1,23 +1,15 @@
 fun vector(x, y) {
   fun obj(first, second) {
-    fun getX() {
-      return x;
-    }
-
-    fun getY() {
-      return y;
-    }
-
     fun add(other) {
       return vector(x+other("x", nil), y+other("y", nil) );
     }
   
     if (first == "x") {
-      return getX();
+      return x;
     }
 
     if (first == "y") {
-      return getY();
+      return y;
     }
 
     if (first == "add") {

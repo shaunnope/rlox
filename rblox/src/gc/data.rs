@@ -1,19 +1,31 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::{cell::{Ref, RefCell as StdRefCell, RefMut}, fmt::Debug};
+
+use super::sweeper::Sweeper;
 
 
 pub trait Push<T> {
   fn push(&mut self, obj: T) -> usize;
 }
 
-pub trait Allocated {
-
+/// Trait for objects that can be gc'd
+pub trait Allocated: Debug {
+  /// Returns `true` if object can be freed. Else, `false`
+  fn check(&self, sweeper: &mut Sweeper) -> bool;
 }
 
-pub struct AlRefCell<T: Allocated>(RefCell<T>);
+#[allow(unused_variables)]
+pub trait Allocatable: Debug {
+  fn check(&self, sweeper: &mut Sweeper) -> bool {
+    false
+  }
+}
 
-impl<T: Allocated> AlRefCell<T> {
+// Wrapper to impl Allocated trait
+pub struct RefCell<T: Allocatable + ?Sized>(StdRefCell<T>);
+
+impl<T: Allocatable> RefCell<T> {
   pub fn new(value: T) -> Self {
-    Self(RefCell::new(value))
+    Self(StdRefCell::new(value))
   }
 
   pub fn borrow(&self) -> Ref<T> {
@@ -25,8 +37,18 @@ impl<T: Allocated> AlRefCell<T> {
   }
 }
 
+impl<T: Allocatable> Debug for RefCell<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      self.0.borrow().fmt(f)
+  }
+}
 
-impl<T: Allocated> Allocated for AlRefCell<T> {}
+
+impl<T: Allocatable> Allocated for RefCell<T> {
+  fn check(&self, sweeper: &mut Sweeper) -> bool {
+    self.0.borrow().check(sweeper)
+  }
+}
 
 pub(crate) struct Iter<'a, T> {
   data: &'a [Option<T>],
@@ -76,39 +98,3 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     };
   }
 }
-
-pub(crate) struct IterMut<'a, T: Clone> {
-  data: &'a mut [Option<T>],
-  curr: usize
-}
-
-impl<'a, T: Clone> IterMut<'a, T> {
-  pub(crate) fn new(data: &'a mut [Option<T>]) -> Self {
-    Self {
-      data,
-      curr: 0
-    }
-  }
-}
-
-impl<'a, T: Clone> Iterator for IterMut<'a, T> {
-  type Item = &'a mut T;
-  fn next(&mut self) -> Option<Self::Item> {
-    loop {
-      if self.curr >= self.data.len() {
-        return None
-      }
-
-       // Unsafe block is necessary to create a mutable reference from self.slice.
-       let item = unsafe { &mut *self.data.as_mut_ptr().add(self.curr) };
-       self.curr += 1;
-
-      match item {
-        None => {},
-        Some(_) => return item.as_mut()
-      };
-    }; 
-
-  }
-}
-

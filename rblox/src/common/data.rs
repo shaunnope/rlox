@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::{Debug, Display}, mem, rc::Rc};
+use std::{fmt::{Debug, Display}, mem, rc::Rc};
 
 use crate::{
   common::{
@@ -6,7 +6,7 @@ use crate::{
   }, compiler::{
     parser::error::ParseError,
     scanner::token::{Token, TokenType}
-  }, gc::data::Allocated, vm::error::RuntimeError
+  }, gc::{data::{Allocatable, Allocated, RefCell}, sweeper::Sweeper}, vm::error::RuntimeError
 };
 
 // pub mod iter;
@@ -122,6 +122,14 @@ impl Debug for LoxFunction {
   }
 }
 
+#[allow(unused_variables)]
+impl Allocated for LoxFunction {
+  fn check(&self, sweeper: &mut Sweeper) -> bool {
+    // TODO: a function can only be freed after all closures it is bound to is out of scope
+    false
+  }
+}
+
 pub struct NativeFunction {
   pub name: &'static str,
   pub arity: usize,
@@ -177,7 +185,22 @@ impl Debug for LoxClosure {
   }
 }
 
-impl Allocated for LoxClosure {}
+impl Allocated for LoxClosure {
+  fn check(&self, sweeper: &mut Sweeper) -> bool {
+    if self.upvalues.len() == 0 {
+      // return true
+      return false
+    }
+    let mut free = self.upvalues.len();
+    for upval in self.upvalues.iter() {
+      if upval.borrow().check(sweeper) {
+        free -= 1;
+      }
+    }
+    let _ = free == 0;
+    false
+  }
+}
 
 
 #[derive(Debug, Clone)]
@@ -185,15 +208,6 @@ impl Allocated for LoxClosure {}
 pub enum LoxUpvalue {
   Open(usize),
   Closed(Value)
-}
-
-impl LoxUpvalue {
-  pub fn _copy(&self) -> Rc<RefCell<Self>> {
-    match self {
-      Self::Open(pos) => Rc::new(RefCell::new(Self::Open(*pos))),
-      Self::Closed(val) => Rc::new(RefCell::new(Self::Closed(val.clone()))),
-    }
-  }
 }
 
 impl From<usize> for LoxUpvalue {
@@ -208,4 +222,22 @@ impl From<Value> for LoxUpvalue {
   }
 }
 
-impl Allocated for LoxUpvalue {}
+#[allow(unused_variables)]
+impl Allocatable for LoxUpvalue {
+  fn check(&self, sweeper: &mut Sweeper) -> bool {
+    if let Self::Open(_) = self {
+      return false
+    }
+    let Self::Closed(val) = self else {unreachable!()};
+
+    match val {
+      Value::Boolean(_) | Value::Nil | Value::Number(_) => true,
+      Value::Object(obj) => {
+        // match obj {
+        //   LoxObject::
+        // }
+        false
+      }
+    }
+  }
+}

@@ -1,27 +1,28 @@
-use std::{cell::RefCell, collections::{BinaryHeap, HashMap}, fmt::{Debug, Display}, rc::Rc};
+use std::{collections::{BinaryHeap, HashMap}, fmt::{Debug, Display}, rc::Rc};
 
 use crate::{
   common::data::{
     LoxClosure, LoxFunction, LoxObject, LoxUpvalue, NativeFunction
   }, 
-  gc::data::{
-    Iter, IterMut, Push
+  gc::{
+    data::{
+      Allocated, Iter, Push, RefCell
+    },
+    sweeper::Sweeper
   }
 };
-
-pub type Gcc<T> = Option<Rc<T>>;
 
 type Container<T> = Option<Rc<T>>; 
 
 
 #[derive(Debug)]
-pub struct Gc<T>
+pub struct Gc<T: Allocated>
 {
   data: Vec<Container<T>>,
   free: BinaryHeap<usize>
 }
 
-impl<T> Default for Gc<T> {
+impl<T: Allocated> Default for Gc<T> {
   fn default() -> Self {
     Self {
       data: Vec::new(),
@@ -30,13 +31,9 @@ impl<T> Default for Gc<T> {
   }
 }
 
-impl<T> Gc<T> {
+impl<T: Allocated + 'static> Gc<T> {
   pub fn iter(&self) -> Iter<'_, Rc<T>> {
     Iter::new(&self.data)
-  }
-
-  pub fn iter_mut(&mut self) -> IterMut<'_, Rc<T>> {
-    IterMut::new(self.data.as_mut_slice())
   }
 
   pub fn last(&self) -> Option<&Rc<T>> {
@@ -53,44 +50,47 @@ impl<T> Gc<T> {
   /// Free up allocations
   pub fn free(&mut self) -> bool {
     if cfg!(feature = "dbg-gc") {
-      println!("--- gc begin")
+      println!("\x1b[2m--- gc begin")
     }
 
     let mut freed = false;
+    let mut sweeper = Sweeper::default();
     for (i, val) in self.data.iter_mut().enumerate() {
       let free = if let Some(inner) = val { 
-        Self::check(inner)
+        Self::check(inner, &mut sweeper)
       } else {
         false
       };
 
       if free {
         if cfg!(feature = "dbg-gc") {
-          println!("{i}");
+          val.clone().inspect(|inner| println!("Freed {inner:?}"));
         }
-        // *val = None;
-        // self.free.push(i);
+        *val = None;
+        self.free.push(i);
         freed = true;
+        
       }
     }
 
     if cfg!(feature = "dbg-gc") {
-      println!("--- gc end")
+      println!("--- gc end\x1b[0m")
     }
     freed
   }
 
-}
-
-
-impl<T> Gc<T> {
-  fn check(obj: &mut Rc<T>) -> bool {
-    Rc::strong_count(obj) == 1
+  /// Check if object can be freed
+  fn check(obj: &mut Rc<T>, sweeper: &mut Sweeper) -> bool {
+    if Rc::strong_count(obj) > 1 {
+      return false
+    }
+    sweeper.push(obj.clone());
+    obj.check(sweeper)
   }
   
 }
 
-impl<T> Push<Rc<T>> for Gc<T> {
+impl<T: Allocated + 'static> Push<Rc<T>> for Gc<T> {
   fn push(&mut self, obj: Rc<T>) -> usize {
     if cfg!(debug_assertions) {
       // "stress test" GC by running it at every allocation
@@ -102,7 +102,7 @@ impl<T> Push<Rc<T>> for Gc<T> {
       self.data.push(item);
 
       if cfg!(feature = "dbg-gc") {
-        println!("Pushed obj to end")
+        println!("Pushed to end: {obj:?}")
       }
 
       return self.data.len() - 1;
@@ -115,7 +115,7 @@ impl<T> Push<Rc<T>> for Gc<T> {
     self.free.pop(); // unfree after allocation 
 
     if cfg!(feature = "dbg-gc") {
-      println!("Inserted obj at {pos}")
+      println!("Inserted at {pos}: {obj:?}")
     }
 
     pos
@@ -123,7 +123,7 @@ impl<T> Push<Rc<T>> for Gc<T> {
 
 }
 
-impl<T> Push<T> for Gc<T> {
+impl<T: Allocated + 'static> Push<T> for Gc<T> {
   fn push(&mut self, obj: T) -> usize {
     self.push(Rc::new(obj))
   }
@@ -141,7 +141,6 @@ pub struct Module {
 }
 
 impl Module {
-
   pub fn alloc_obj(&mut self, obj: Rc<LoxObject>) -> Rc<LoxObject> {
     if let LoxObject::String(str) = &*obj {
       self.add_string(str)
@@ -229,6 +228,13 @@ impl Push<NativeFunction> for Module {
 impl Push<LoxClosure> for Module {
   fn push(&mut self, func: LoxClosure) -> usize {
     self.closures.push(func)
+  }
+
+}
+
+impl Push<RefCell<LoxUpvalue>> for Module {
+  fn push(&mut self, value: RefCell<LoxUpvalue>) -> usize {
+    self.upvals.push(value)
   }
 
 }

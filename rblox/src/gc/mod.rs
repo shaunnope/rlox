@@ -1,5 +1,6 @@
 
 mod module;
+pub mod sweeper;
 
 pub mod data;
 
